@@ -170,8 +170,8 @@ async function vod(id, opts = {}) {
 
   const ui = openUI('vod');
   Object.assign(st, { id, it, mode: it.plan, dur: it.dur, base: 0, startAt: 0, lastSave: 0 });
-  // en televisores el .mkv directo da imagen negra o cortes (varias pistas, carátula incrustada): se pasa siempre por remux (copia de vídeo)
-  if (st.mode === 'direct' && it.ffmpeg && it.ext === '.mkv' && document.documentElement.classList.contains('tv')) st.mode = 'remux';
+  // en televisores (LG webOS) ni el .mkv directo ni el MP4 por copia de vídeo se ven (audio sin imagen o cortes): se recodifica a H.264 estándar
+  if (tvX264(it) && (st.mode === 'remux' || (st.mode === 'direct' && it.ext === '.mkv'))) st.mode = 'x264';
   const isEp = it.kind === 'episode';
   ui.title.textContent = isEp ? it.series : it.title;
   ui.sub.textContent = isEp ? `${it.season ? 'T' + it.season + ' · ' : ''}E${it.ep || ''} — ${it.title}` : [it.year || '', it.dur ? Math.max(1, Math.round(it.dur / 60)) + ' min' : ''].filter(Boolean).join(' · ');
@@ -203,7 +203,7 @@ async function vod(id, opts = {}) {
   st.audio = 0; st.sub = 'off';
   // idioma preferido de la última vez (se recuerda al elegir)
   const pa = localStorage.getItem('alang'), ps = localStorage.getItem('slang');
-  if (pa && it.audio.length > 1) { const k = it.audio.findIndex(t => lc(t.l) === pa); if (k > 0) { st.audio = k; st.mode = it.plan === 'x264' ? 'x264' : 'remux'; } }
+  if (pa && it.audio.length > 1) { const k = it.audio.findIndex(t => lc(t.l) === pa); if (k > 0) { st.audio = k; st.mode = it.plan === 'x264' || tvX264(it) ? 'x264' : 'remux'; } }
   if (ps && ps !== 'off') {
     const e = it.esubs.find(t => lc(t.l) === ps); const f = it.subs.findIndex(t => lc(t.l) === ps);
     if (e) st.sub = 'e' + e.i; else if (f >= 0) st.sub = 'f' + it.subs[f].n;
@@ -232,6 +232,8 @@ async function vod(id, opts = {}) {
     ui.wrap.append(ui.rs); setTimeout(() => ui.rs && ui.rs.remove(), 9000);
   }
 }
+
+function tvX264(it) { return !!it.ffmpeg && document.documentElement.classList.contains('tv'); }
 
 function load(t) {
   const v = st.ui.v;
@@ -331,7 +333,7 @@ function setAudio(i) {
   st.audio = i;
   const lang = lc(st.it.audio[i] && st.it.audio[i].l); if (lang) localStorage.setItem('alang', lang);
   // cambiar de pista exige conversión en el servidor (los navegadores no permiten elegir audio); la pista 0 vuelve al modo original
-  st.mode = i === 0 ? st.it.plan : (st.it.plan === 'x264' ? 'x264' : 'remux');
+  st.mode = i === 0 ? st.it.plan : (st.it.plan === 'x264' || tvX264(st.it) ? 'x264' : 'remux');
   const t = cur(); buildMenu(); toggleMenu(false); load(t);
   toast('Audio: ' + audLabel(st.it.audio[i], i));
 }

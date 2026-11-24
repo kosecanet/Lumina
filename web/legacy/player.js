@@ -343,7 +343,7 @@ var __async = (__this, __arguments, generator) => {
       if (start == null || start < 0) start = it.pos > 10 && !fin ? it.pos : 0;
       const ui = openUI("vod");
       Object.assign(st, { id, it, mode: it.plan, dur: it.dur, base: 0, startAt: 0, lastSave: 0 });
-      if (st.mode === "direct" && it.ffmpeg && it.ext === ".mkv" && document.documentElement.classList.contains("tv")) st.mode = "remux";
+      if (tvX264(it) && (st.mode === "remux" || st.mode === "direct" && it.ext === ".mkv")) st.mode = "x264";
       const isEp = it.kind === "episode";
       ui.title.textContent = isEp ? it.series : it.title;
       ui.sub.textContent = isEp ? "".concat(it.season ? "T" + it.season + " \xB7 " : "", "E").concat(it.ep || "", " \u2014 ").concat(it.title) : [it.year || "", it.dur ? Math.max(1, Math.round(it.dur / 60)) + " min" : ""].filter(Boolean).join(" \xB7 ");
@@ -417,7 +417,7 @@ var __async = (__this, __arguments, generator) => {
         const k = it.audio.findIndex((t) => lc(t.l) === pa);
         if (k > 0) {
           st.audio = k;
-          st.mode = it.plan === "x264" ? "x264" : "remux";
+          st.mode = it.plan === "x264" || tvX264(it) ? "x264" : "remux";
         }
       }
       if (ps && ps !== "off") {
@@ -468,6 +468,9 @@ var __async = (__this, __arguments, generator) => {
         setTimeout(() => ui.rs && ui.rs.remove(), 9e3);
       }
     });
+  }
+  function tvX264(it) {
+    return !!it.ffmpeg && document.documentElement.classList.contains("tv");
   }
   function load(t) {
     const v = st.ui.v;
@@ -608,7 +611,7 @@ var __async = (__this, __arguments, generator) => {
     st.audio = i;
     const lang = lc(st.it.audio[i] && st.it.audio[i].l);
     if (lang) localStorage.setItem("alang", lang);
-    st.mode = i === 0 ? st.it.plan : st.it.plan === "x264" ? "x264" : "remux";
+    st.mode = i === 0 ? st.it.plan : st.it.plan === "x264" || tvX264(st.it) ? "x264" : "remux";
     const t = cur();
     buildMenu();
     toggleMenu(false);
