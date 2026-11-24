@@ -796,8 +796,15 @@ func (a *App) hRemux(w http.ResponseWriter, r *http.Request) {
 	}
 	// aresample async mantiene el audio sincronizado tras cortes o timestamps irregulares
 	args = append(args, "-c:a", "aac", "-b:a", "192k", "-ac", "2", "-af", "aresample=async=1:first_pts=0",
-		"-max_muxing_queue_size", "2048",
-		"-movflags", "frag_keyframe+empty_moov+default_base_moof", "-f", "mp4", "pipe:1")
+		"-max_muxing_queue_size", "2048")
+	ctype := "video/mp4"
+	if r.URL.Query().Get("f") == "ts" {
+		// MPEG-TS para el reproductor MSE (televisores: el MP4 fragmentado en <video> da audio sin imagen en LG webOS)
+		args = append(args, "-muxdelay", "0", "-f", "mpegts", "pipe:1")
+		ctype = "video/mp2t"
+	} else {
+		args = append(args, "-movflags", "frag_keyframe+empty_moov+default_base_moof", "-f", "mp4", "pipe:1")
+	}
 	ctx, cancel := context.WithCancel(r.Context())
 	defer cancel()
 	cmd := exec.CommandContext(ctx, a.ffmpeg, args...)
@@ -821,7 +828,7 @@ func (a *App) hRemux(w http.ResponseWriter, r *http.Request) {
 		jsonErr(w, 500, "no se pudo convertir este vídeo")
 		return
 	}
-	w.Header().Set("Content-Type", "video/mp4")
+	w.Header().Set("Content-Type", ctype)
 	w.Header().Set("Cache-Control", "no-store")
 	rc := http.NewResponseController(w)
 	write := func(b []byte) bool {

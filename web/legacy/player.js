@@ -472,8 +472,59 @@ var __async = (__this, __arguments, generator) => {
   function tvX264(it) {
     return !!it.ffmpeg && document.documentElement.classList.contains("tv");
   }
+  function killMp() {
+    if (st && st.mp) {
+      try {
+        st.mp.pause();
+        st.mp.unload();
+        st.mp.detachMediaElement();
+        st.mp.destroy();
+      } catch (e) {
+      }
+      st.mp = null;
+    }
+  }
+  function loadTS(t) {
+    const v = st.ui.v, tok = st.tsTok = (st.tsTok || 0) + 1;
+    killMp();
+    st.base = t;
+    st.pend = null;
+    st.tsDone = false;
+    st.ui.spin.hidden = false;
+    hideMsg();
+    const fallback = () => {
+      if (!st || tok !== st.tsTok) return;
+      killMp();
+      st.noTS = true;
+      load(cur());
+    };
+    loadMpegts().then((mp) => {
+      if (!st || tok !== st.tsTok) return;
+      if (!mp.isSupported()) return fallback();
+      const p = mp.createPlayer(
+        { type: "mpegts", isLive: true, url: "".concat(location.origin, "/remux/").concat(st.id, "?ss=").concat(t.toFixed(1), "&a=").concat(st.audio, "&m=x264&f=ts") },
+        { enableWorker: true, liveBufferLatencyChasing: false, lazyLoad: false, autoCleanupSourceBuffer: true, autoCleanupMaxBackwardDuration: 30, autoCleanupMinBackwardDuration: 15 }
+      );
+      st.mp = p;
+      p.on(mp.Events.ERROR, (a, b, c) => {
+        console.warn("[Lumina] error MSE:", a, b, c && (c.msg || c.code));
+        fallback();
+      });
+      p.on(mp.Events.LOADING_COMPLETE, () => {
+        if (st && tok === st.tsTok) st.tsDone = true;
+      });
+      p.attachMediaElement(v);
+      p.load();
+      const pr = v.play();
+      if (pr) pr.catch((e) => {
+        if (e.name === "NotAllowedError") showMsg("Pulsa para reproducir", [{ label: "Reproducir", pri: true, fn: () => v.play() }]);
+      });
+    }, fallback);
+  }
   function load(t) {
     const v = st.ui.v;
+    if (st.mode !== "direct" && !st.noTS && tvX264(st.it)) return loadTS(t);
+    killMp();
     st.base = 0;
     st.pend = null;
     st.ui.spin.hidden = false;
@@ -519,6 +570,10 @@ var __async = (__this, __arguments, generator) => {
     if (v.buffered.length && d) st.ui.bf.style.width = Math.min(100, (st.base + v.buffered.end(v.buffered.length - 1)) / d * 100) + "%";
     if (Date.now() - st.lastSave > 1e4) saveProgress();
     if (st.it.next) st.ui.nextb.hidden = !(d && d - c < 30);
+    if (st.tsDone && !st.ended && d && c > d - 4 && v.buffered.length && v.buffered.end(v.buffered.length - 1) - v.currentTime < 0.6) {
+      st.ended = true;
+      onEnded();
+    }
   }
   function onVideoErr() {
     if (!st || st.kind !== "vod") return;

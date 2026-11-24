@@ -235,8 +235,31 @@ async function vod(id, opts = {}) {
 
 function tvX264(it) { return !!it.ffmpeg && document.documentElement.classList.contains('tv'); }
 
+function killMp() { if (st && st.mp) { try { st.mp.pause(); st.mp.unload(); st.mp.detachMediaElement(); st.mp.destroy(); } catch { /* nada */ } st.mp = null; } }
+
+// televisores: la conversión se envía como MPEG-TS al reproductor MSE (el mismo que el directo, que sí funciona en LG)
+function loadTS(t) {
+  const v = st.ui.v, tok = st.tsTok = (st.tsTok || 0) + 1;
+  killMp(); st.base = t; st.pend = null; st.tsDone = false; st.ui.spin.hidden = false; hideMsg();
+  const fallback = () => { if (!st || tok !== st.tsTok) return; killMp(); st.noTS = true; load(cur()); };
+  loadMpegts().then(mp => {
+    if (!st || tok !== st.tsTok) return;
+    if (!mp.isSupported()) return fallback();
+    const p = mp.createPlayer({ type: 'mpegts', isLive: true, url: `${location.origin}/remux/${st.id}?ss=${t.toFixed(1)}&a=${st.audio}&m=x264&f=ts` },
+      { enableWorker: true, liveBufferLatencyChasing: false, lazyLoad: false, autoCleanupSourceBuffer: true, autoCleanupMaxBackwardDuration: 30, autoCleanupMinBackwardDuration: 15 });
+    st.mp = p;
+    p.on(mp.Events.ERROR, (a, b, c) => { console.warn('[Lumina] error MSE:', a, b, c && (c.msg || c.code)); fallback(); });
+    p.on(mp.Events.LOADING_COMPLETE, () => { if (st && tok === st.tsTok) st.tsDone = true; });
+    p.attachMediaElement(v); p.load();
+    const pr = v.play();
+    if (pr) pr.catch(e => { if (e.name === 'NotAllowedError') showMsg('Pulsa para reproducir', [{ label: 'Reproducir', pri: true, fn: () => v.play() }]); });
+  }, fallback);
+}
+
 function load(t) {
   const v = st.ui.v;
+  if (st.mode !== 'direct' && !st.noTS && tvX264(st.it)) return loadTS(t);
+  killMp();
   st.base = 0; st.pend = null; st.ui.spin.hidden = false; hideMsg();
   v.preload = 'auto';
   if (st.mode === 'direct') { v.src = '/stream/' + st.id + (t > 1 ? '#t=' + t.toFixed(1) : ''); st.startAt = 0; }  // #t=: el navegador pide directamente ese tramo
@@ -269,6 +292,8 @@ function tick() {
   if (v.buffered.length && d) st.ui.bf.style.width = Math.min(100, (st.base + v.buffered.end(v.buffered.length - 1)) / d * 100) + '%';
   if (Date.now() - st.lastSave > 10000) saveProgress();
   if (st.it.next) st.ui.nextb.hidden = !(d && d - c < 30);
+  // fin del flujo MPEG-TS: el reproductor MSE no dispara «ended» en este modo
+  if (st.tsDone && !st.ended && d && c > d - 4 && v.buffered.length && v.buffered.end(v.buffered.length - 1) - v.currentTime < 0.6) { st.ended = true; onEnded(); }
 }
 
 function onVideoErr() {
