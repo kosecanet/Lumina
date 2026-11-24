@@ -218,6 +218,14 @@ async function vod(id, opts = {}) {
   v.addEventListener('timeupdate', tick);
   v.addEventListener('ended', onEnded);
   v.addEventListener('error', onVideoErr);
+  // vigilante de imagen negra: si el audio avanza pero el decodificador no da vídeo (videoWidth 0), se pasa al modo siguiente
+  let bt = 0;
+  const blk = setInterval(() => {
+    if (!st || st.kind !== 'vod' || st.ui.v !== v) { clearInterval(blk); return; }
+    if (v.paused || v.ended || v.readyState < 2 || v.currentTime < 0.5) { bt = 0; return; }
+    if (v.videoWidth > 0) { bt = 0; return; }
+    if (++bt >= 3) { bt = 0; onVideoErr(); }
+  }, 1000);
   load(start);
   if (start > 10 && it.dur) { // aviso de reanudación con opción de empezar de nuevo
     ui.rs = el('button', { class: 'btn rsb', onclick: () => { ui.rs.remove(); seek(0); } }, icon('refresh'), 'Empezar desde el principio');

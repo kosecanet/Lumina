@@ -439,6 +439,25 @@ var __async = (__this, __arguments, generator) => {
       v.addEventListener("timeupdate", tick);
       v.addEventListener("ended", onEnded);
       v.addEventListener("error", onVideoErr);
+      let bt = 0;
+      const blk = setInterval(() => {
+        if (!st || st.kind !== "vod" || st.ui.v !== v) {
+          clearInterval(blk);
+          return;
+        }
+        if (v.paused || v.ended || v.readyState < 2 || v.currentTime < 0.5) {
+          bt = 0;
+          return;
+        }
+        if (v.videoWidth > 0) {
+          bt = 0;
+          return;
+        }
+        if (++bt >= 3) {
+          bt = 0;
+          onVideoErr();
+        }
+      }, 1e3);
       load(start);
       if (start > 10 && it.dur) {
         ui.rs = el("button", { class: "btn rsb", onclick: () => {
