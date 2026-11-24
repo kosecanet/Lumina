@@ -1863,6 +1863,37 @@ select.inp {
   flex: 0 0 261px;
   height:0;padding-top:56.25%;
 }
+@media (max-height: 520px) and (min-width: 721px) {
+  #nav {
+    padding: 6px 0;
+    gap: 0;
+    overflow-y: auto;
+    overflow-x: hidden;
+    scrollbar-width: none;
+  }
+  #nav::-webkit-scrollbar {
+    display: none;
+  }
+  .ni {
+    height: 40px;
+  }
+  .ni svg {
+    width: 24px;
+    height: 24px;
+  }
+  .ni.pf {
+    height: 46px;
+    margin-bottom: 2px;
+  }
+  .ni.pf .av {
+    width: 28px;
+    height: 28px;
+  }
+  .ni.on::before {
+    top: 9px;
+    bottom: 9px;
+  }
+}
 @media (max-width: 720px) {
   :root {
     --rail:0px;

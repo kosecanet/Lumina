@@ -323,6 +323,14 @@ select.inp{padding-right:28px}
 .skel .a{height:46vh;min-height:260px;margin-bottom:24px}
 .skel .b{display:flex;gap:14px}
 .skel .b div{flex:0 0 clamp(190px,17vw,300px);aspect-ratio:16/9}
+/* pantallas bajas en horizontal (móviles Android): barra lateral compacta y con desplazamiento, para que quepan todas las entradas (también Ajustes) */
+@media(max-height:520px) and (min-width:721px){
+  #nav{padding:6px 0;gap:0;overflow-y:auto;overflow-x:hidden;scrollbar-width:none}
+  #nav::-webkit-scrollbar{display:none}
+  .ni{height:40px}.ni svg{width:24px;height:24px}
+  .ni.pf{height:46px;margin-bottom:2px}.ni.pf .av{width:28px;height:28px}
+  .ni.on::before{top:9px;bottom:9px}
+}
 @media(max-width:720px){
   :root{--rail:0px}
   #nav{top:auto;bottom:0;left:0;right:0;width:auto;height:58px;flex-direction:row;gap:0;padding:0;overflow:visible;background:rgba(6,10,15,.97);border-top:1px solid var(--line)}
