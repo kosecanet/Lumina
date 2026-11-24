@@ -34,7 +34,8 @@ input:focus,button:focus{outline:5px solid #fff;outline-offset:3px}
   function open(u) {
     setup.hidden = true; err.textContent = '';
     check(u).then(function () {
-      fr.hidden = false; fr.src = u + '/?tv=1'; fr.onload = function () { try { fr.focus(); fr.contentWindow.focus(); } catch (e) {} };
+      // navegación directa (no iframe): la cookie de sesión del servidor es de primera parte y se conserva
+      location.replace(u + '/?tv=1&app=' + encodeURIComponent(location.href.split('#')[0]));
     }, function () { showSetup('No se pudo conectar con ' + u + '. Comprueba la dirección y que el servidor esté encendido.'); });
   }
   function go() { var u = norm(inp.value); if (!u) { err.textContent = 'Escribe una dirección'; return; } localStorage.setItem(KEY, u); open(u); }
@@ -44,6 +45,6 @@ input:focus,button:focus{outline:5px solid #fff;outline-offset:3px}
   addEventListener('message', function (e) { if (e.data && e.data.lumina === 'setup') showSetup(); });
   addEventListener('keydown', function (e) { if (e.keyCode === 405 && fr.hidden === true) return; });
   var saved = localStorage.getItem(KEY);
-  if (saved) open(saved); else showSetup();
+  if (saved && location.hash !== '#setup') open(saved); else showSetup();
 })();
 </script></body></html>

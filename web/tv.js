@@ -87,7 +87,14 @@ const KEYS = { 461: 'back', 10009: 'back', 8: 'back', 27: 'back', 405: 'yellow',
 addEventListener('keydown', e => {
   const typing = e.target.tagName === 'INPUT' && e.target.type !== 'range' || e.target.tagName === 'TEXTAREA';
   const k = KEYS[e.keyCode] || (e.key === 'GoBack' || e.key === 'BrowserBack' ? 'back' : '');
-  if (k === 'yellow') { e.preventDefault(); try { parent.postMessage({ lumina: 'setup' }, '*'); } catch {} return; }
+  if (k === 'yellow') {
+    e.preventDefault();
+    try { const q = new URLSearchParams(location.search).get('app'); if (q) sessionStorage.setItem('lumina.app', q); } catch {}
+    let app = ''; try { app = sessionStorage.getItem('lumina.app') || ''; } catch {}
+    if (parent !== window) { try { parent.postMessage({ lumina: 'setup' }, '*'); } catch {} }
+    else if (app) location.href = app + '#setup';
+    return;
+  }
   if (k === 'back') {
     if (typing && e.keyCode === 8) return;          // retroceso en un campo de texto
     if (modalOpen() || playerOpen()) return;         // los gestiona su propio Escape/cerrar

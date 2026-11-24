@@ -130,9 +130,21 @@
     if (k === "yellow") {
       e.preventDefault();
       try {
-        parent.postMessage({ lumina: "setup" }, "*");
+        const q = new URLSearchParams(location.search).get("app");
+        if (q) sessionStorage.setItem("lumina.app", q);
       } catch (e2) {
       }
+      let app = "";
+      try {
+        app = sessionStorage.getItem("lumina.app") || "";
+      } catch (e2) {
+      }
+      if (parent !== window) {
+        try {
+          parent.postMessage({ lumina: "setup" }, "*");
+        } catch (e2) {
+        }
+      } else if (app) location.href = app + "#setup";
       return;
     }
     if (k === "back") {
