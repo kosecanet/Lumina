@@ -1,0 +1,10 @@
+data/
+dist/
+node_modules/
+*.exe~
+.lumina-update.tmp
+*.old
+clients/android/.gradle/
+clients/android/build/
+clients/android/app/build/
+clients/android/local.properties

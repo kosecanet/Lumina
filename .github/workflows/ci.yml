@@ -1,0 +1,22 @@
+name: CI
+on:
+  push: { branches: [main] }
+  pull_request:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with: { go-version: '1.24' }
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - name: Versión compatible de la web (LG webOS / Fire TV antiguos) al día
+        run: |
+          npm i --no-save esbuild
+          node tools/legacy/build.mjs node_modules/.bin/esbuild
+          git diff --exit-code web/legacy || (echo "::error::web/legacy desactualizado: ejecuta node tools/legacy/build.mjs y haz commit" && exit 1)
+      - run: go vet ./...
+      - run: go test ./...
+      - run: GOOS=windows go build -o /dev/null .
+      - run: GOOS=linux GOARCH=arm64 go build -o /dev/null .

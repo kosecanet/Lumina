@@ -1,0 +1,15 @@
+# /etc/systemd/system/lumina.service  →  sudo systemctl enable --now lumina
+[Unit]
+Description=Lumina
+After=network-online.target
+
+[Service]
+User=lumina
+WorkingDirectory=/opt/lumina
+ExecStart=/opt/lumina/lumina -addr :8780 -data /var/lib/lumina
+Environment=LUMINA_PASSWORD=cambia-esto
+Restart=always
+RestartSec=2
+# el usuario necesita poder escribir en /opt/lumina para que Lumina se actualice a sí misma
+[Install]
+WantedBy=multi-user.target

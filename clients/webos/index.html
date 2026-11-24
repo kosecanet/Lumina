@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Lumina</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%;background:#0f171e;color:#f3f6f8;font:28px/1.4 system-ui,Roboto,Arial,sans-serif;overflow:hidden}
+iframe{position:fixed;inset:0;width:100%;height:100%;border:0;background:#0f171e}
+#setup{position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:26px;text-align:center;padding:60px}
+h1{font-size:64px;letter-spacing:.5px}p{color:#8fa2b1;max-width:1100px}
+input{width:900px;max-width:90vw;font:inherit;padding:18px 24px;border-radius:12px;border:2px solid #2a3a49;background:#18232e;color:#fff;text-align:center}
+button{font:inherit;font-weight:700;padding:16px 44px;border-radius:12px;border:0;background:#1a98ff;color:#fff}
+input:focus,button:focus{outline:5px solid #fff;outline-offset:3px}
+.err{color:#ff5c6c;min-height:1.4em}
+[hidden]{display:none!important}
+</style></head><body>
+<div id="setup" hidden>
+  <h1>Lumina</h1>
+  <p>Escribe la dirección de tu servidor Lumina (por ejemplo <b>192.168.1.50:8780</b>)</p>
+  <input id="url" inputmode="url" autocomplete="off" placeholder="192.168.1.50:8780">
+  <div class="err" id="err"></div>
+  <button id="go">Conectar</button>
+</div>
+<iframe id="fr" hidden allow="autoplay; fullscreen" allowfullscreen></iframe>
+<script>
+(function () {
+  var KEY = 'lumina.server', $ = function (s) { return document.querySelector(s); };
+  var fr = $('#fr'), setup = $('#setup'), inp = $('#url'), err = $('#err');
+  function norm(u) { u = (u || '').trim().replace(/\/+$/, ''); if (!u) return ''; if (!/^https?:\/\//i.test(u)) u = 'http://' + u; return u; }
+  function showSetup(msg) { fr.hidden = true; fr.src = 'about:blank'; setup.hidden = false; err.textContent = msg || ''; inp.value = localStorage.getItem(KEY) || ''; inp.focus(); }
+  function check(u) { // 'no-cors' resuelve con cualquier respuesta y falla solo si no hay conexión
+    var c = new AbortController(), t = setTimeout(function () { c.abort(); }, 6000);
+    return fetch(u + '/api/auth', { mode: 'no-cors', signal: c.signal }).then(function () { clearTimeout(t); }, function (e) { clearTimeout(t); throw e; });
+  }
+  function open(u) {
+    setup.hidden = true; err.textContent = '';
+    check(u).then(function () {
+      fr.hidden = false; fr.src = u + '/?tv=1'; fr.onload = function () { try { fr.focus(); fr.contentWindow.focus(); } catch (e) {} };
+    }, function () { showSetup('No se pudo conectar con ' + u + '. Comprueba la dirección y que el servidor esté encendido.'); });
+  }
+  function go() { var u = norm(inp.value); if (!u) { err.textContent = 'Escribe una dirección'; return; } localStorage.setItem(KEY, u); open(u); }
+  $('#go').onclick = go;
+  inp.onkeydown = function (e) { if (e.keyCode === 13) go(); };
+  // Lumina (dentro del iframe) pide cambiar de servidor con la tecla amarilla
+  addEventListener('message', function (e) { if (e.data && e.data.lumina === 'setup') showSetup(); });
+  addEventListener('keydown', function (e) { if (e.keyCode === 405 && fr.hidden === true) return; });
+  var saved = localStorage.getItem(KEY);
+  if (saved) open(saved); else showSetup();
+})();
+</script></body></html>

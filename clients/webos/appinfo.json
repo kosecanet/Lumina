@@ -1,0 +1,13 @@
+{
+  "id": "com.lumina.tv",
+  "version": "0.1.0",
+  "vendor": "Lumina",
+  "type": "web",
+  "main": "index.html",
+  "title": "Lumina",
+  "icon": "icon.png",
+  "largeIcon": "largeIcon.png",
+  "bgColor": "#0f171e",
+  "resolution": "1920x1080",
+  "disableBackHistoryAPI": false
+}
