@@ -10,9 +10,9 @@ import (
 
 // restartSelf sustituye el proceso por el ejecutable nuevo (mismo PID: systemd/Docker no notan nada).
 func restartSelf() {
-	exe, err := os.Executable()
-	if err != nil {
-		log.Printf("reinicio: %v", err)
+	exe := startExe
+	if exe == "" {
+		log.Printf("reinicio: no se pudo localizar el ejecutable")
 		return
 	}
 	log.Printf("reiniciando…")

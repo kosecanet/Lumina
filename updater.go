@@ -82,6 +82,19 @@ func (u *Updater) repo() string {
 	return strings.TrimSpace(r)
 }
 
+// startExe: ruta del ejecutable fijada al arrancar. Tras instalar una actualización el binario en marcha pasa a llamarse
+// «lumina.old» y os.Executable() (que lee /proc/self/exe) devolvería esa ruta: reiniciar con ella relanzaba la versión ANTIGUA.
+var startExe = func() string {
+	p, err := os.Executable()
+	if err != nil {
+		return ""
+	}
+	if r, err := filepath.EvalSymlinks(p); err == nil {
+		p = r
+	}
+	return p
+}()
+
 // ---------- versiones ----------
 
 func verParts(v string) []int {
@@ -316,12 +329,9 @@ func (u *Updater) Apply(ctx context.Context) (string, error) {
 	if sums == nil {
 		return "", errors.New("la release no incluye checksums.txt; no se instala sin verificar")
 	}
-	exe, err := os.Executable()
-	if err != nil {
-		return "", err
-	}
-	if p, err := filepath.EvalSymlinks(exe); err == nil {
-		exe = p
+	exe := startExe
+	if exe == "" {
+		return "", errors.New("no se pudo localizar el ejecutable")
 	}
 	dir := filepath.Dir(exe)
 	tmp := filepath.Join(dir, ".lumina-update.tmp")

@@ -9,9 +9,9 @@ import (
 )
 
 func restartSelf() {
-	exe, err := os.Executable()
-	if err != nil {
-		log.Printf("reinicio: %v", err)
+	exe := startExe
+	if exe == "" {
+		log.Printf("reinicio: no se pudo localizar el ejecutable")
 		return
 	}
 	log.Printf("reiniciando…")
