@@ -491,6 +491,7 @@ func (app *App) hItem(w http.ResponseWriter, r *http.Request) {
 		"card": c, "title": it.Title, "series": it.Series, "sid": it.SID, "season": it.Season, "ep": it.Episode,
 		"year": it.Year, "dur": it.Dur, "plan": plan(it, a.ffmpeg != ""), "lib": it.Lib, "kind": it.Kind,
 		"pos": a.pr()[it.ID].Pos, "vc": it.VC, "ac": it.AC, "ffmpeg": a.ffmpeg != "", "cloud": isCloud(it),
+		"ext": strings.ToLower(filepath.Ext(it.Path)),
 	}
 	if it.Kind == "episode" {
 		if n := a.nextEp(it); n != nil {

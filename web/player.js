@@ -170,6 +170,8 @@ async function vod(id, opts = {}) {
 
   const ui = openUI('vod');
   Object.assign(st, { id, it, mode: it.plan, dur: it.dur, base: 0, startAt: 0, lastSave: 0 });
+  // en televisores el .mkv directo da imagen negra o cortes (varias pistas, carátula incrustada): se pasa siempre por remux (copia de vídeo)
+  if (st.mode === 'direct' && it.ffmpeg && it.ext === '.mkv' && document.documentElement.classList.contains('tv')) st.mode = 'remux';
   const isEp = it.kind === 'episode';
   ui.title.textContent = isEp ? it.series : it.title;
   ui.sub.textContent = isEp ? `${it.season ? 'T' + it.season + ' · ' : ''}E${it.ep || ''} — ${it.title}` : [it.year || '', it.dur ? Math.max(1, Math.round(it.dur / 60)) + ' min' : ''].filter(Boolean).join(' · ');

@@ -343,6 +343,7 @@ var __async = (__this, __arguments, generator) => {
       if (start == null || start < 0) start = it.pos > 10 && !fin ? it.pos : 0;
       const ui = openUI("vod");
       Object.assign(st, { id, it, mode: it.plan, dur: it.dur, base: 0, startAt: 0, lastSave: 0 });
+      if (st.mode === "direct" && it.ffmpeg && it.ext === ".mkv" && document.documentElement.classList.contains("tv")) st.mode = "remux";
       const isEp = it.kind === "episode";
       ui.title.textContent = isEp ? it.series : it.title;
       ui.sub.textContent = isEp ? "".concat(it.season ? "T" + it.season + " \xB7 " : "", "E").concat(it.ep || "", " \u2014 ").concat(it.title) : [it.year || "", it.dur ? Math.max(1, Math.round(it.dur / 60)) + " min" : ""].filter(Boolean).join(" \xB7 ");
