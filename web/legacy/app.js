@@ -413,7 +413,7 @@ var __async = (__this, __arguments, generator) => {
       )
     );
   }
-  function hero(items) {
+  function hero(items, tmdb) {
     let cur = 0;
     const slides = items.map((c, i) => {
       const img = el("img", { class: "bg", alt: "", decoding: "async" });
@@ -442,9 +442,13 @@ var __async = (__this, __arguments, generator) => {
         s.style.cssText = grad(c.ti) + ";background:var(--g)";
       };
       img.onload = () => img.classList.toggle("lo", img.naturalWidth > 0 && img.naturalWidth < 1e3 && !img.src.includes("image.tmdb.org"));
-      if (c.th) api("/api/meta/" + c.th).then((r) => {
-        const bd = r && r.meta && r.meta.bd;
-        if (!bd) return;
+      return s;
+    });
+    if (tmdb) items.reduce((p, c, i) => p.then(() => {
+      if (!c.th) return;
+      return api("/api/meta/" + c.th).then((r) => {
+        const bd = r && r.meta && r.meta.bd, s = slides[i], img = s.firstChild;
+        if (!bd || !img || img.tagName !== "IMG") return;
         s.dataset.src = bd;
         if (img.src) {
           const n = new Image();
@@ -455,8 +459,7 @@ var __async = (__this, __arguments, generator) => {
         }
       }).catch(() => {
       });
-      return s;
-    });
+    }), Promise.resolve());
     const dots = items.map((_, i) => el("button", { "aria-label": "Ir a " + (i + 1), onclick: () => {
       show(i);
       restart();
@@ -488,7 +491,7 @@ var __async = (__this, __arguments, generator) => {
       const page = el("div");
       if (d.empty) return mount(tok, onboarding());
       const rows = el("div", { class: "rows" });
-      page.append(d.hero.length ? hero(d.hero) : el("div", { class: "spacer" }), rows);
+      page.append(d.hero.length ? hero(d.hero, d.tmdb) : el("div", { class: "spacer" }), rows);
       let liveDone = false;
       const addLive = () => {
         if (!liveDone && d.live && d.live.length) {

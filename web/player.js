@@ -555,6 +555,8 @@ function busy(d) {
 
 function onLiveErr(tok) {
   if (!st || st.kind !== 'live' || tok !== st.tok) return;
+  const v = st.ui.v;
+  report(`directo «${st.chan.n}» (modo ${st.clean || 0}, intento ${st.retries + 1}): ${st.lastErr || (v.error ? 'error del vídeo ' + verr(v) : 'no llega imagen')}; estado ${v.readyState}, t=${(v.currentTime || 0).toFixed(1)}`);
   if (st.retries < 3) { st.retries++; st.clean = Math.max(st.clean || 0, st.retries >= 2 ? 2 : 1); const t = tok; setTimeout(() => { if (st && st.tok === t) tune(false); }, 1500); return; }
   destroyMp();
   showMsg('No se puede reproducir este canal ahora. Puede que el proveedor no responda, que el canal esté caído o que otra persona haya cambiado de canal.' + (st.lastErr ? ' (' + st.lastErr + ')' : ''),

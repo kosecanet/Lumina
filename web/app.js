@@ -277,7 +277,7 @@ function onboarding() {
       el('a', { class: 'btn', href: '#/settings/tv', text: 'Configurar TV en directo' })));
 }
 
-function hero(items) {
+function hero(items, tmdb) {
   let cur = 0;
   const slides = items.map((c, i) => {
     const img = el('img', { class: 'bg', alt: '', decoding: 'async' });
@@ -293,15 +293,19 @@ function hero(items) {
     img.onerror = () => { img.remove(); s.style.cssText = grad(c.ti) + ';background:var(--g)'; };
     // imágenes pequeñas (carátulas de la nube): se difuminan en vez de verse pixeladas
     img.onload = () => img.classList.toggle('lo', img.naturalWidth > 0 && img.naturalWidth < 1000 && !img.src.includes('image.tmdb.org'));
-    // fondo panorámico de TMDB si hay clave configurada
-    if (c.th) api('/api/meta/' + c.th).then(r => {
-      const bd = r && r.meta && r.meta.bd;
-      if (!bd) return;
+    return s;
+  });
+  // fondos panorámicos de TMDB (solo con clave): de uno en uno, para no ocupar las conexiones del navegador
+  // (si no, el vídeo o el directo que se abran justo después esperan en cola)
+  if (tmdb) items.reduce((p, c, i) => p.then(() => {
+    if (!c.th) return;
+    return api('/api/meta/' + c.th).then(r => {
+      const bd = r && r.meta && r.meta.bd, s = slides[i], img = s.firstChild;
+      if (!bd || !img || img.tagName !== 'IMG') return;
       s.dataset.src = bd;
       if (img.src) { const n = new Image(); n.onload = () => { img.src = bd; }; n.src = bd; }
     }).catch(() => {});
-    return s;
-  });
+  }), Promise.resolve());
   const dots = items.map((_, i) => el('button', { 'aria-label': 'Ir a ' + (i + 1), onclick: () => { show(i); restart(); } }));
   const box = el('div', { class: 'hero' }, slides, items.length > 1 ? el('div', { class: 'dots' }, dots) : null);
   function show(i) {
@@ -323,7 +327,7 @@ async function vHome(_, q, tok) {
   const page = el('div');
   if (d.empty) return mount(tok, onboarding());
   const rows = el('div', { class: 'rows' });
-  page.append(d.hero.length ? hero(d.hero) : el('div', { class: 'spacer' }), rows);
+  page.append(d.hero.length ? hero(d.hero, d.tmdb) : el('div', { class: 'spacer' }), rows);
   let liveDone = false;
   const addLive = () => { if (!liveDone && d.live && d.live.length) { liveDone = true; rows.append(row('TV en directo', d.live.map(c => liveCard(c, d.live)), '#/live')); } };
   for (const r of d.rows) {

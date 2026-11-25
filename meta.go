@@ -38,6 +38,7 @@ var metaState struct {
 	loaded bool
 	found  map[string]*Meta
 	miss   map[string]int64
+	busy   map[string]chan struct{}
 }
 
 var metaClient = &http.Client{Timeout: 9 * time.Second, Transport: &http.Transport{
@@ -55,6 +56,7 @@ func (a *App) metaLoadLocked() {
 	metaState.loaded = true
 	metaState.found = map[string]*Meta{}
 	metaState.miss = map[string]int64{}
+	metaState.busy = map[string]chan struct{}{}
 	if b, err := os.ReadFile(filepath.Join(a.dir, "meta.json")); err == nil {
 		_ = json.Unmarshal(b, &metaState.found)
 	}
@@ -75,33 +77,52 @@ func (a *App) tmdbKey() string {
 func (a *App) metaFor(kind, title string, year int) *Meta {
 	key := metaKey(kind, title, year)
 	metaState.mu.Lock()
-	defer metaState.mu.Unlock()
 	a.metaLoadLocked()
 	if m := metaState.found[key]; m != nil && (m.Source != "TMDB" || m.Img == 1) {
+		metaState.mu.Unlock()
 		return m
 	}
 	old := metaState.found[key] // ficha de TMDB guardada antes de existir las imágenes de fondo: se vuelve a pedir una vez
 	if t := metaState.miss[key]; t > 0 && time.Now().Unix()-t < 6*3600 {
+		metaState.mu.Unlock()
 		return nil
 	}
+	// una sola consulta por ficha a la vez; las demás fichas no esperan (antes el candado se mantenía durante
+	// la consulta a internet y una web lenta bloqueaba todas las peticiones de información)
+	if ch, ok := metaState.busy[key]; ok {
+		metaState.mu.Unlock()
+		<-ch
+		metaState.mu.Lock()
+		defer metaState.mu.Unlock()
+		return metaState.found[key]
+	}
+	ch := make(chan struct{})
+	metaState.busy[key] = ch
+	metaState.mu.Unlock()
+
 	var m *Meta
 	if k := a.tmdbKey(); k != "" {
 		m, _ = tmdbFetch(k, kind, title, year)
 	}
-	if m == nil && old != nil {
-		old.Img = 1
-		a.metaSaveLocked()
-		return old
-	}
-	if m == nil { // sin clave, o TMDB sin resultado: Wikipedia en español
+	if m == nil && old == nil { // sin clave, o TMDB sin resultado: Wikipedia en español
 		m, _ = wikiFetch(kind, title, year)
 	}
-	if m == nil {
+
+	metaState.mu.Lock()
+	defer metaState.mu.Unlock()
+	delete(metaState.busy, key)
+	close(ch)
+	switch {
+	case m != nil:
+		m.At = time.Now().Unix()
+		metaState.found[key] = m
+	case old != nil:
+		old.Img = 1
+		m = old
+	default:
 		metaState.miss[key] = time.Now().Unix()
 		return nil
 	}
-	m.At = time.Now().Unix()
-	metaState.found[key] = m
 	a.metaSaveLocked()
 	return m
 }

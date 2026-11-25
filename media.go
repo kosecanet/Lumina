@@ -128,9 +128,10 @@ func (a *App) nextEp(it *Item) *Item {
 
 // ---------- portada ----------
 
-func (a *App) hHome(w http.ResponseWriter, r *http.Request) {
-	v := a.V(r)
+func (app *App) hHome(w http.ResponseWriter, r *http.Request) {
+	v := app.V(r)
 	res := v.buildHome()
+	res["tmdb"] = app.tmdbKey() != "" // los fondos panorámicos del inicio solo vienen de TMDB
 	if v.u.liveOK() {
 		res["live"] = v.chanViews(true, 24)
 	} else {
