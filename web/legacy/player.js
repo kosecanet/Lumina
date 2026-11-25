@@ -1011,9 +1011,10 @@ var __async = (__this, __arguments, generator) => {
     if (!st || st.kind !== "live" || tok !== st.tok) return;
     const v = st.ui.v;
     report("directo \xAB".concat(st.chan.n, "\xBB (modo ").concat(st.clean || 0, ", intento ").concat(st.retries + 1, "): ").concat(st.lastErr || (v.error ? "error del v\xEDdeo " + verr(v) : "no llega imagen"), "; estado ").concat(v.readyState, ", t=").concat((v.currentTime || 0).toFixed(1)));
+    const tv = document.documentElement.classList.contains("tv");
     if (st.retries < 3) {
       st.retries++;
-      st.clean = Math.max(st.clean || 0, st.retries >= 2 ? 2 : 1);
+      st.clean = Math.max(st.clean || 0, !tv || st.retries >= 2 ? 2 : 1);
       const t = tok;
       setTimeout(() => {
         if (st && st.tok === t) tune(false);

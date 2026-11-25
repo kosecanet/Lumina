@@ -620,7 +620,7 @@ func (a *App) cleanLive(w http.ResponseWriter, r *http.Request, rc *http.Respons
 	first := true
 	ctx, cancel := context.WithCancel(r.Context())
 	defer cancel()
-	args := []string{"-hide_banner", "-loglevel", "error", "-nostdin",
+	args := []string{"-hide_banner", "-loglevel", "info", "-nostats", "-nostdin",
 		"-fflags", "+genpts+discardcorrupt+nobuffer", "-analyzeduration", "700000", "-probesize", "1200000",
 		"-f", "mpegts", "-i", "pipe:0", "-map", "0:v:0", "-map", "0:a:0?", "-c:v", "copy",
 		// el audio se pasa siempre a AAC estéreo: muchos canales emiten AC3/E-AC3 (Dolby) o MP2, que los navegadores de
@@ -679,7 +679,7 @@ func (a *App) cleanLive(w http.ResponseWriter, r *http.Request, rc *http.Respons
 		if n > 0 {
 			if first {
 				first = false
-				log.Printf("directo: canal %d: proveedor listo en %.1fs, primer dato de vídeo %.1fs después", id, tReady.Seconds(), time.Since(t1).Seconds())
+				log.Printf("directo: canal %d: proveedor listo en %.1fs, primer dato de vídeo %.1fs después; %s", id, tReady.Seconds(), time.Since(t1).Seconds(), streamInfo(stderr.String()))
 			}
 			_ = rc.SetWriteDeadline(time.Now().Add(20 * time.Second))
 			if _, werr := w.Write(buf[:n]); werr != nil {
@@ -724,4 +724,32 @@ func (c *countWriter) result() string {
 		return fmt.Sprintf("HTTP %d", c.code)
 	}
 	return "HTTP 200 " + c.Header().Get("Content-Type")
+}
+
+// streamInfo resume las pistas de entrada que describe ffmpeg («Stream #0:0[0x100]: Video: h264 (High) …»).
+func streamInfo(stderr string) string {
+	var out []string
+	for _, ln := range strings.Split(stderr, "\n") {
+		ln = strings.TrimSpace(ln)
+		if strings.HasPrefix(ln, "Output #") { // a partir de aquí son las pistas de salida
+			break
+		}
+		if !strings.HasPrefix(ln, "Stream #0:") || strings.Contains(ln, "->") {
+			continue
+		}
+		if i := strings.Index(ln, ": "); i > 0 {
+			ln = ln[i+2:]
+		}
+		if len(ln) > 110 {
+			ln = ln[:110] + "…"
+		}
+		out = append(out, ln)
+		if len(out) == 4 {
+			break
+		}
+	}
+	if len(out) == 0 {
+		return "pistas: ?"
+	}
+	return "pistas: " + strings.Join(out, " | ")
 }

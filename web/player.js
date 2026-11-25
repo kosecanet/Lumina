@@ -564,7 +564,10 @@ function onLiveErr(tok) {
   if (!st || st.kind !== 'live' || tok !== st.tok) return;
   const v = st.ui.v;
   report(`directo «${st.chan.n}» (modo ${st.clean || 0}, intento ${st.retries + 1}): ${st.lastErr || (v.error ? 'error del vídeo ' + verr(v) : 'no llega imagen')}; estado ${v.readyState}, t=${(v.currentTime || 0).toFixed(1)}`);
-  if (st.retries < 3) { st.retries++; st.clean = Math.max(st.clean || 0, st.retries >= 2 ? 2 : 1); const t = tok; setTimeout(() => { if (st && st.tok === t) tune(false); }, 1500); return; }
+  // en ordenador y móvil se salta directamente al MP4 (modo 2), que es el que funciona cuando mpegts.js no puede;
+  // en la tele (webOS) el MP4 en <video> da problemas, así que allí se prueba antes el TS limpio (modo 1)
+  const tv = document.documentElement.classList.contains('tv');
+  if (st.retries < 3) { st.retries++; st.clean = Math.max(st.clean || 0, !tv || st.retries >= 2 ? 2 : 1); const t = tok; setTimeout(() => { if (st && st.tok === t) tune(false); }, 1500); return; }
   destroyMp();
   showMsg('No se puede reproducir este canal ahora. Puede que el proveedor no responda, que el canal esté caído o que otra persona haya cambiado de canal.' + (st.lastErr ? ' (' + st.lastErr + ')' : ''),
     [{ label: 'Reintentar', pri: true, fn: () => { st.retries = 0; tune(false); } }, { label: 'Cerrar', fn: close }]);

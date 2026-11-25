@@ -999,16 +999,26 @@ func (a *App) hKeyframe(w http.ResponseWriter, r *http.Request) {
 }
 
 // limitBuf guarda solo el final de la salida de error de ffmpeg (máx. 2 KB).
-type limitBuf struct{ b []byte }
+type limitBuf struct {
+	mu sync.Mutex
+	b  []byte
+}
 
 func (l *limitBuf) Write(p []byte) (int, error) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
 	l.b = append(l.b, p...)
 	if len(l.b) > 2048 {
 		l.b = l.b[len(l.b)-2048:]
 	}
 	return len(p), nil
 }
-func (l *limitBuf) String() string { return strings.TrimSpace(string(l.b)) }
+
+func (l *limitBuf) String() string {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return strings.TrimSpace(string(l.b))
+}
 
 func (a *App) hThumb(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
