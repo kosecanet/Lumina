@@ -603,8 +603,8 @@ func (a *App) hLiveStream(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// cleanLive re-empaqueta el directo sin recodificar (-c copy): solo el primer vídeo y el primer audio, sin subtítulos DVB ni
-// tablas extrañas. Algunos proveedores emiten TS que el navegador no digiere tal cual; limpio sí. No toca la conexión al proveedor.
+// cleanLive re-empaqueta el directo sin recodificar el vídeo: solo el primer vídeo y el primer audio (pasado a AAC), sin
+// subtítulos DVB ni tablas extrañas. Algunos proveedores emiten TS que el navegador no digiere tal cual; limpio sí. No toca la conexión al proveedor.
 func (a *App) cleanLive(w http.ResponseWriter, r *http.Request, rc *http.ResponseController, sub *Sub, fmp4 bool, id int, tReady time.Duration) {
 	t1 := time.Now()
 	first := true
@@ -612,11 +612,14 @@ func (a *App) cleanLive(w http.ResponseWriter, r *http.Request, rc *http.Respons
 	defer cancel()
 	args := []string{"-hide_banner", "-loglevel", "error", "-nostdin",
 		"-fflags", "+genpts+discardcorrupt+nobuffer", "-analyzeduration", "700000", "-probesize", "1200000",
-		"-f", "mpegts", "-i", "pipe:0", "-map", "0:v:0", "-map", "0:a:0?", "-c", "copy", "-sn", "-dn"}
+		"-f", "mpegts", "-i", "pipe:0", "-map", "0:v:0", "-map", "0:a:0?", "-c:v", "copy",
+		// el audio se pasa siempre a AAC estéreo: muchos canales emiten AC3/E-AC3 (Dolby) o MP2, que los navegadores de
+		// escritorio no decodifican (vídeo negro o «could not open»); convertir solo el audio apenas gasta CPU
+		"-c:a", "aac", "-b:a", "160k", "-ac", "2", "-af", "aresample=async=1", "-sn", "-dn"}
 	if fmp4 {
-		// MP4 fragmentado (como hace Jellyfin): el <video> lo reproduce sin mpegts.js; el audio ADTS pasa a ASC
+		// MP4 fragmentado (como hace Jellyfin): el <video> lo reproduce sin mpegts.js
 		w.Header().Set("Content-Type", "video/mp4")
-		args = append(args, "-bsf:a", "aac_adtstoasc", "-movflags", "frag_keyframe+empty_moov+default_base_moof", "-frag_duration", "1000000", "-flush_packets", "1", "-f", "mp4", "pipe:1")
+		args = append(args, "-movflags", "frag_keyframe+empty_moov+default_base_moof", "-frag_duration", "1000000", "-flush_packets", "1", "-f", "mp4", "pipe:1")
 	} else {
 		w.Header().Set("Content-Type", "video/mp2t")
 		args = append(args, "-muxdelay", "0", "-flush_packets", "1", "-f", "mpegts", "pipe:1")

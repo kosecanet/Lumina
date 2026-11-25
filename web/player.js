@@ -540,6 +540,13 @@ async function tune(force, attempt = 0) {
       lazyLoad: false, autoCleanupSourceBuffer: true, autoCleanupMaxBackwardDuration: 20, autoCleanupMinBackwardDuration: 10 });
   st.mp = p; lastLiveId = c.id;
   p.on(mp.Events.ERROR, (t, d, i) => { const m = [t, d, i && (i.msg || i.code)].filter(Boolean).join(' / '); console.warn('[Lumina] error de reproducción:', m); if (st && tok === st.tok) st.lastErr = m; onLiveErr(tok); });
+  // audio que este navegador no decodifica (AC3/E-AC3 en Chrome de escritorio): se pasa enseguida al modo limpio, que lo convierte a AAC
+  p.on(mp.Events.MEDIA_INFO, mi => {
+    const ac = (mi && mi.audioCodec) || '';
+    if (st && tok === st.tok && !st.clean && ac && window.MediaSource && !MediaSource.isTypeSupported(`audio/mp4; codecs="${ac}"`)) {
+      st.lastErr = 'audio ' + ac + ' no compatible con este navegador'; onLiveErr(tok);
+    }
+  });
   p.attachMediaElement(st.ui.v); p.load();
   liveWatchdog(tok);
   const pr = st.ui.v.play();

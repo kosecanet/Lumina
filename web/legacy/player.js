@@ -983,6 +983,13 @@ var __async = (__this, __arguments, generator) => {
         if (st && tok === st.tok) st.lastErr = m;
         onLiveErr(tok);
       });
+      p.on(mp.Events.MEDIA_INFO, (mi) => {
+        const ac = mi && mi.audioCodec || "";
+        if (st && tok === st.tok && !st.clean && ac && window.MediaSource && !MediaSource.isTypeSupported('audio/mp4; codecs="'.concat(ac, '"'))) {
+          st.lastErr = "audio " + ac + " no compatible con este navegador";
+          onLiveErr(tok);
+        }
+      });
       p.attachMediaElement(st.ui.v);
       p.load();
       liveWatchdog(tok);
