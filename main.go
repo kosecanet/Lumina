@@ -38,7 +38,7 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	_ = os.Remove(exePath() + ".old") // copia anterior de una actualización en Windows
+	_ = os.Remove(startExe + ".old") // copia anterior de una actualización en Windows
 	mux := http.NewServeMux()
 	a.routes(mux)
 
@@ -66,12 +66,4 @@ func main() {
 	}
 	go a.upd.loop()
 	log.Fatal(srv.Serve(ln))
-}
-
-func exePath() string {
-	p, err := os.Executable()
-	if err != nil {
-		return ""
-	}
-	return p
 }

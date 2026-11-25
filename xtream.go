@@ -1030,6 +1030,8 @@ func (a *App) hLogo(w http.ResponseWriter, r *http.Request) {
 	_, _ = f.Seek(0, 0)
 	w.Header().Set("Content-Type", ct)
 	w.Header().Set("Cache-Control", "public, max-age=604800")
+	// los logos vienen del proveedor: un SVG con scripts no debe poder ejecutarse en el origen de Lumina
+	w.Header().Set("Content-Security-Policy", "default-src 'none'; style-src 'unsafe-inline'; sandbox")
 	st2, _ := f.Stat()
 	http.ServeContent(w, r, "", st2.ModTime(), f)
 }

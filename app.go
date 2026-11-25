@@ -11,6 +11,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"io/fs"
+	"log"
 	"mime"
 	"net/http"
 	"net/url"
@@ -237,11 +238,27 @@ func (a *App) load(name string, v any) {
 	}
 }
 
+// writeFile guarda de forma atómica (temporal único + rename) y solo legible por el usuario del servicio:
+// config.json contiene hashes de contraseñas, el secreto de sesión y las credenciales del proveedor.
 func (a *App) writeFile(name string, b []byte) {
 	p := filepath.Join(a.dir, name)
-	tmp := p + ".tmp"
-	if err := os.WriteFile(tmp, b, 0o644); err == nil {
-		_ = os.Rename(tmp, p)
+	f, err := os.CreateTemp(filepath.Dir(p), filepath.Base(p)+".*.tmp")
+	if err != nil {
+		log.Printf("no se pudo guardar %s: %v", name, err)
+		return
+	}
+	tmp := f.Name()
+	_, err = f.Write(b)
+	if cerr := f.Close(); err == nil {
+		err = cerr
+	}
+	if err == nil {
+		_ = os.Chmod(tmp, 0o600)
+		err = os.Rename(tmp, p)
+	}
+	if err != nil {
+		_ = os.Remove(tmp)
+		log.Printf("no se pudo guardar %s: %v", name, err)
 	}
 }
 
@@ -416,6 +433,9 @@ func sameOrigin(next http.Handler) http.Handler {
 func (a *App) auth(next http.Handler) http.Handler {
 	next = sameOrigin(next)
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		h := w.Header()
+		h.Set("X-Content-Type-Options", "nosniff")
+		h.Set("Referrer-Policy", "same-origin")
 		p := r.URL.Path
 		protected := strings.HasPrefix(p, "/api/") || strings.HasPrefix(p, "/stream/") ||
 			strings.HasPrefix(p, "/remux/") || strings.HasPrefix(p, "/live/") || strings.HasPrefix(p, "/sub/")
@@ -449,13 +469,18 @@ func (a *App) authed(r *http.Request) bool {
 	if a.pass == "" {
 		return true
 	}
-	t := ""
+	return subtle.ConstantTimeCompare([]byte(reqToken(r)), []byte(a.token)) == 1
+}
+
+// reqToken: token de sesión de la cookie "lum" o de la cabecera Authorization: Bearer.
+func reqToken(r *http.Request) string {
 	if c, err := r.Cookie("lum"); err == nil {
-		t = c.Value
-	} else if h := r.Header.Get("Authorization"); strings.HasPrefix(h, "Bearer ") {
-		t = strings.TrimPrefix(h, "Bearer ")
+		return c.Value
 	}
-	return subtle.ConstantTimeCompare([]byte(t), []byte(a.token)) == 1
+	if h := r.Header.Get("Authorization"); strings.HasPrefix(h, "Bearer ") {
+		return strings.TrimPrefix(h, "Bearer ")
+	}
+	return ""
 }
 
 // ---------- JSON y estáticos ----------

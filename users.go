@@ -103,13 +103,7 @@ func (a *App) newSession(uid string) string {
 
 // sessionUser devuelve el usuario de la sesión (cookie "lum" o cabecera Bearer) o nil.
 func (a *App) sessionUser(r *http.Request) *User {
-	t := ""
-	if c, err := r.Cookie("lum"); err == nil {
-		t = c.Value
-	} else if h := r.Header.Get("Authorization"); strings.HasPrefix(h, "Bearer ") {
-		t = strings.TrimPrefix(h, "Bearer ")
-	}
-	p := strings.Split(t, ".")
+	p := strings.Split(reqToken(r), ".")
 	if len(p) != 4 || p[0] != "s1" {
 		return nil
 	}

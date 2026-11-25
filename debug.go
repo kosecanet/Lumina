@@ -222,12 +222,19 @@ func (a *App) hProbe(w http.ResponseWriter, r *http.Request) {
 	in := it.Path
 	var pre []string
 	if isCloud(it) {
-		// ocupa una conexión del proveedor unos segundos: solo si no hay otra reproducción de esa serie
+		// ocupa una conexión del proveedor unos segundos: se cuenta como una reproducción más
 		u, c, err := a.cloudURL(it.Path)
 		if err != nil {
 			jsonErr(w, 502, err.Error())
 			return
 		}
+		ls, sub, busy := a.hub.vodAcquire(cloudKey(it), "análisis «"+it.Series+"»", false)
+		if busy != nil {
+			res["error"] = "el proveedor no tiene conexiones libres ahora (hay otra reproducción en marcha)"
+			writeJSON(w, r, res)
+			return
+		}
+		defer a.hub.release(ls, sub)
 		in, pre = u, []string{"-user_agent", c.ua}
 	}
 	ctx, cancel := context.WithTimeout(r.Context(), 25*time.Second)
