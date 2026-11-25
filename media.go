@@ -841,7 +841,15 @@ func (a *App) hRemux(w http.ResponseWriter, r *http.Request) {
 	args := []string{"-hide_banner", "-loglevel", "error", "-nostdin", "-probesize", "10M", "-analyzeduration", "5M"}
 	args = append(args, inArgs...)
 	if ss > 0 {
-		args = append(args, "-ss", fmt.Sprintf("%.3f", ss))
+		if enc {
+			// recodificando, el corte es exacto: audio y vídeo empiezan los dos en ss
+			args = append(args, "-ss", fmt.Sprintf("%.3f", ss))
+		} else {
+			// copiando, el vídeo solo puede empezar en un fotograma clave: no se recorta el audio (-noaccurate_seek)
+			// para que los dos empiecen en el mismo punto. ss es el fotograma clave de /api/keyframe; el margen de
+			// 0,2 s evita que ffmpeg, que busca un poco antes en vídeos con fotogramas B, caiga en el anterior.
+			args = append(args, "-noaccurate_seek", "-ss", fmt.Sprintf("%.3f", ss+0.2))
+		}
 	}
 	ai, _ := strconv.Atoi(r.URL.Query().Get("a"))
 	if ai < 0 || ai > 63 {
@@ -857,11 +865,11 @@ func (a *App) hRemux(w http.ResponseWriter, r *http.Request) {
 			args = append(args, "-tag:v", "hvc1")
 		}
 	}
-	// aresample async mantiene el audio sincronizado tras cortes o timestamps irregulares; en la copia el audio se
-	// retrasa lo mismo que el primer fotograma (d, de /api/keyframe) para que el navegador no lo adelante
-	af := "aresample=async=1:first_pts=0"
-	if d, _ := strconv.ParseFloat(r.URL.Query().Get("d"), 64); !enc && d > 0.001 && d < 0.5 {
-		af += fmt.Sprintf(",adelay=delays=%d:all=1", int(d*1000+0.5))
+	// aresample async mantiene el audio sincronizado tras cortes o timestamps irregulares. En la copia no se fuerza el
+	// primer instante a 0 (first_pts): recortaría el audio anterior al punto de búsqueda y lo adelantaría al vídeo.
+	af := "aresample=async=1"
+	if enc {
+		af += ":first_pts=0"
 	}
 	args = append(args, "-c:a", "aac", "-b:a", "192k", "-ac", "2", "-af", af,
 		"-max_muxing_queue_size", "2048")
@@ -958,39 +966,35 @@ func (a *App) hKeyframe(w http.ResponseWriter, r *http.Request) {
 		}
 		in, pre = u, []string{"-user_agent", c.ua}
 	}
-	k, d := t, 0.0
-	args := append([]string{"-v", "error", "-select_streams", "v:0", "-show_entries", "packet=pts_time,dts_time,flags", "-of", "csv=p=0",
-		"-read_intervals", fmt.Sprintf("%.3f%%%.3f", math.Max(0, t-30), t+0.05)}, pre...)
+	// ffprobe busca igual que ffmpeg (por el índice del archivo): el primer fotograma clave que devuelve es donde
+	// empezará la conversión (que luego busca en ese fotograma + 0,2 s y cae en el mismo).
+	k := t
 	t0 := time.Now()
+	args := append([]string{"-v", "error", "-select_streams", "v:0", "-show_entries", "packet=pts_time,flags", "-of", "csv=p=0",
+		"-read_intervals", fmt.Sprintf("%.3f%%+#12", t)}, pre...)
 	out, err := exec.CommandContext(ctx, a.ffprobe, append(args, in)...).Output()
-	if err != nil {
-		log.Printf("salto en «%s» a %.1f s: no se pudo localizar el fotograma clave (%v); el audio puede quedar desfasado", it.Title, t, err)
-	} else {
-		best, bestD := -1.0, 0.0
+	found := false
+	if err == nil {
 		for _, ln := range strings.Split(string(out), "\n") {
 			f := strings.Split(strings.TrimSpace(ln), ",")
-			if len(f) < 3 || !strings.Contains(f[2], "K") {
+			if len(f) < 2 || !strings.Contains(f[1], "K") {
 				continue
 			}
-			if pt, err := strconv.ParseFloat(f[0], 64); err == nil && pt <= t+0.001 && pt > best {
-				best, bestD = pt, 0
-				if dt, err := strconv.ParseFloat(f[1], 64); err == nil {
-					bestD = pt - dt
-				}
+			if pt, err := strconv.ParseFloat(f[0], 64); err == nil && pt <= t+0.001 {
+				k, found = pt, true
+				break
 			}
-		}
-		if best >= 0 {
-			k = best
-			// retraso de presentación de los fotogramas B: el vídeo empieza ese tiempo después que el audio
-			if bestD > 0 && bestD < 0.5 {
-				d = bestD
-			}
-			log.Printf("salto en «%s» a %.1f s → fotograma clave %.2f s (+%.0f ms) en %d ms", it.Title, t, k, d*1000, time.Since(t0).Milliseconds())
-		} else {
-			log.Printf("salto en «%s» a %.1f s: sin fotograma clave en los 30 s anteriores", it.Title, t)
 		}
 	}
-	writeJSON(w, r, map[string]any{"k": k, "d": d})
+	switch {
+	case err != nil:
+		log.Printf("salto en «%s» a %.1f s: no se pudo localizar el fotograma clave (%v)", it.Title, t, err)
+	case found:
+		log.Printf("salto en «%s» a %.1f s → empieza en el fotograma clave %.2f s (%d ms)", it.Title, t, k, time.Since(t0).Milliseconds())
+	default:
+		log.Printf("salto en «%s» a %.1f s: no se encontró el fotograma clave; el contador de tiempo puede ir algo desplazado", it.Title, t)
+	}
+	writeJSON(w, r, map[string]any{"k": k})
 }
 
 // limitBuf guarda solo el final de la salida de error de ffmpeg (máx. 2 KB).

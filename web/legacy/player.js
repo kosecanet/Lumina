@@ -557,11 +557,11 @@ var __async = (__this, __arguments, generator) => {
     hideMsg();
     v.preload = "auto";
     const lt = st.loadTok = (st.loadTok || 0) + 1;
-    const go = (k, d) => {
+    const go = (k) => {
       if (!st || lt !== st.loadTok) return;
       st.wait = null;
       st.base = k;
-      v.src = "/remux/".concat(st.id, "?ss=").concat(k.toFixed(3), "&a=").concat(st.audio) + (st.mode === "x264" ? "&m=x264" : d ? "&d=" + d.toFixed(3) : "");
+      v.src = "/remux/".concat(st.id, "?ss=").concat(k.toFixed(3), "&a=").concat(st.audio) + (st.mode === "x264" ? "&m=x264" : "");
       applySub();
       playV(v);
     };
@@ -573,7 +573,7 @@ var __async = (__this, __arguments, generator) => {
       st.wait = t;
       v.pause();
       v.removeAttribute("src");
-      api("/api/keyframe/".concat(st.id, "?t=").concat(t.toFixed(3))).then((r) => go(typeof r.k === "number" ? r.k : t, r.d || 0), () => go(t));
+      api("/api/keyframe/".concat(st.id, "?t=").concat(t.toFixed(3))).then((r) => go(typeof r.k === "number" ? r.k : t), () => go(t));
       return;
     } else return go(t);
     applySub();

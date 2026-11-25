@@ -279,15 +279,15 @@ function load(t) {
   st.base = 0; st.pend = null; st.ui.spin.hidden = false; hideMsg();
   v.preload = 'auto';
   const lt = st.loadTok = (st.loadTok || 0) + 1;
-  const go = (k, d) => {
+  const go = k => {
     if (!st || lt !== st.loadTok) return;
-    st.wait = null; st.base = k; v.src = `/remux/${st.id}?ss=${k.toFixed(3)}&a=${st.audio}` + (st.mode === 'x264' ? '&m=x264' : (d ? '&d=' + d.toFixed(3) : ''));
+    st.wait = null; st.base = k; v.src = `/remux/${st.id}?ss=${k.toFixed(3)}&a=${st.audio}` + (st.mode === 'x264' ? '&m=x264' : '');
     applySub(); playV(v);
   };
   st.wait = null;
   if (st.mode === 'direct') { v.src = '/stream/' + st.id + (t > 1 ? '#t=' + t.toFixed(1) : ''); st.startAt = 0; }  // #t=: el navegador pide directamente ese tramo
   // copia del vídeo: se empieza en el fotograma clave anterior (si no, el audio queda desfasado)
-  else if (st.mode === 'remux' && t > 1) { st.wait = t; v.pause(); v.removeAttribute('src'); api(`/api/keyframe/${st.id}?t=${t.toFixed(3)}`).then(r => go(typeof r.k === 'number' ? r.k : t, r.d || 0), () => go(t)); return; }
+  else if (st.mode === 'remux' && t > 1) { st.wait = t; v.pause(); v.removeAttribute('src'); api(`/api/keyframe/${st.id}?t=${t.toFixed(3)}`).then(r => go(typeof r.k === 'number' ? r.k : t), () => go(t)); return; }
   else return go(t);
   applySub(); playV(v);
 }
