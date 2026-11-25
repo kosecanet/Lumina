@@ -940,7 +940,7 @@ function showProfiles() {
   const old = $('#who'); if (old) old.remove();
   const root = el('div', { id: 'who', class: 'who', role: 'dialog', 'aria-label': '¿Quién está viendo?' });
   document.body.append(root);
-  const logo = () => { const s = el('span'); s.innerHTML = '<svg viewBox="0 0 32 32"><rect width="32" height="32" rx="8" fill="#1a98ff"/><path d="M12 9l11 7-11 7z" fill="#fff"/></svg>'; return s.firstChild; };
+  const logo = () => el('img', { src: '/logo.svg', alt: '', class: 'lg' });
 
   function editor(p) {
     const st = { name: p ? p.name : '', color: p ? p.color : (S.profiles.length % 6), kind: p ? p.kind : 'u' };
@@ -998,7 +998,7 @@ async function showLogin() {
     e.preventDefault();
     const er = form.querySelector('.err');
     try { await post('/api/login', { user: acc ? form.elements.user.value : '', password: form.elements.password.value }); location.hash = '#/'; location.reload(); } catch (x) { er.textContent = x.message; }
-  } }, el('h1', { text: 'Lumina' }),
+  } }, el('h1', { class: 'lgh' }, el('img', { src: '/logo.svg', alt: '', class: 'lg' }), 'Lumina'),
   acc ? el('input', { class: 'inp', name: 'user', type: 'text', placeholder: 'Usuario', autocomplete: 'username', autofocus: true, 'aria-label': 'Usuario' }) : null,
   el('input', { class: 'inp', name: 'password', type: 'password', placeholder: 'Contraseña', autocomplete: 'current-password', autofocus: !acc, 'aria-label': 'Contraseña' }),
   el('div', { class: 'err' }), el('button', { class: 'btn pri', type: 'submit', text: 'Entrar' }));
