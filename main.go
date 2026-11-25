@@ -33,6 +33,7 @@ func main() {
 		return
 	}
 
+	installLog()
 	a, err := NewApp(*data, *pass)
 	if err != nil {
 		log.Fatal(err)

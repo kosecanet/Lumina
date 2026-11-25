@@ -441,6 +441,20 @@ var __async = (__this, __arguments, generator) => {
         img.remove();
         s.style.cssText = grad(c.ti) + ";background:var(--g)";
       };
+      img.onload = () => img.classList.toggle("lo", img.naturalWidth > 0 && img.naturalWidth < 1e3 && !img.src.includes("image.tmdb.org"));
+      if (c.th) api("/api/meta/" + c.th).then((r) => {
+        const bd = r && r.meta && r.meta.bd;
+        if (!bd) return;
+        s.dataset.src = bd;
+        if (img.src) {
+          const n = new Image();
+          n.onload = () => {
+            img.src = bd;
+          };
+          n.src = bd;
+        }
+      }).catch(() => {
+      });
       return s;
     });
     const dots = items.map((_, i) => el("button", { "aria-label": "Ir a " + (i + 1), onclick: () => {
@@ -834,11 +848,12 @@ var __async = (__this, __arguments, generator) => {
         return;
       }
       const body = el("div");
-      const tabs = el("div", { class: "tabs" }, [["bib", "Bibliotecas"], ["tv", "TV en directo"], ["usr", "Usuarios"], ["sys", "Sistema"]].map(([k, t]) => el("a", { href: "#/settings/" + k, class: k === tab ? "on" : "", text: t })));
+      const tabs = el("div", { class: "tabs" }, [["bib", "Bibliotecas"], ["tv", "TV en directo"], ["usr", "Usuarios"], ["sys", "Sistema"], ["dbg", "Depuraci\xF3n"]].map(([k, t]) => el("a", { href: "#/settings/" + k, class: k === tab ? "on" : "", text: t })));
       if (!mount(tok, el("div", { class: "set" }, el("h1", { text: "Ajustes" }), tabs, body))) return;
       if (tab === "tv") yield setTV(body, tok);
       else if (tab === "usr") yield setUsers(body, tok);
       else if (tab === "sys") yield setSys(body, tok);
+      else if (tab === "dbg") yield setDbg(body, tok);
       else yield setLibs(body, tok);
     });
   }
@@ -1488,6 +1503,137 @@ var __async = (__this, __arguments, generator) => {
         )),
         !d.ffmpeg ? el("div", { class: "panel" }, el("h3", { text: "Recomendado: instala ffmpeg" }), el("p", { class: "hint", text: "Sin ffmpeg no hay miniaturas generadas, duraci\xF3n, ni conversi\xF3n autom\xE1tica de audio AC3/DTS o contenedores AVI. Copia ffmpeg y ffprobe junto al ejecutable de Lumina, o inst\xE1lalos en el sistema." })) : null
       ));
+    });
+  }
+  let dbgTimer = 0;
+  function setDbg(body, tok) {
+    return __async(this, null, function* () {
+      clearInterval(dbgTimer);
+      const st = { auto: true, filter: "", errs: false };
+      const kv = el("dl", { class: "kv", style: "margin-top:12px" });
+      const convs = el("div", { class: "dbgc" });
+      const pre = el("pre", { class: "dbgl", tabindex: "0" });
+      const filt = el("input", { class: "inp", placeholder: "Filtrar el registro (p. ej. ffmpeg, nube, cliente)\u2026", "aria-label": "Filtrar el registro", oninput: (e) => {
+        st.filter = e.target.value.toLowerCase();
+        paint();
+      } });
+      const auto = el("label", { class: "chk" }, el("input", { type: "checkbox", checked: true, onchange: (e) => {
+        st.auto = e.target.checked;
+      } }), " Actualizar cada 3 s");
+      const errs = el("label", { class: "chk" }, el("input", { type: "checkbox", onchange: (e) => {
+        st.errs = e.target.checked;
+        paint();
+      } }), " Solo errores y avisos");
+      let lines = [];
+      const ERR = /(error|fall|no se pud|sin salida|interrump|aviso|rechaz|HTTP [45]\d\d|imagen negra|sin audio|no se puede)/i;
+      const hhmm = (t) => new Date(t).toLocaleTimeString("es-ES", { hour12: false });
+      function paint() {
+        const atEnd = pre.scrollHeight - pre.scrollTop - pre.clientHeight < 40;
+        const sel = lines.filter((l) => (!st.filter || l.m.toLowerCase().includes(st.filter)) && (!st.errs || ERR.test(l.m)));
+        pre.replaceChildren(...sel.map((l) => el("div", { class: ERR.test(l.m) ? "e" : l.m.startsWith("cliente") ? "c" : "" }, el("span", { class: "ts", text: hhmm(l.t) + " " }), l.m)));
+        if (!sel.length) pre.textContent = "Sin l\xEDneas que mostrar.";
+        if (atEnd) pre.scrollTop = pre.scrollHeight;
+      }
+      const up = (s) => {
+        s = Math.floor(s);
+        const d = Math.floor(s / 86400), h = Math.floor(s % 86400 / 3600), m = Math.floor(s % 3600 / 60);
+        return (d ? d + " d " : "") + (h ? h + " h " : "") + m + " min";
+      };
+      function load() {
+        return __async(this, null, function* () {
+          let d;
+          try {
+            d = yield api("/api/system/debug?n=1000");
+          } catch (e) {
+            toast(e.message, true);
+            return;
+          }
+          const row2 = (k, v) => [el("dt", { text: k }), el("dd", { text: v })];
+          kv.replaceChildren(...[
+            row2("Versi\xF3n", "Lumina ".concat(d.version, " \xB7 ").concat(d.go, " \xB7 ").concat(d.os, " \xB7 ").concat(d.cpus, " n\xFAcleos")),
+            row2("Servidor", "".concat(d.host, " \xB7 encendido ").concat(up(d.uptime))),
+            row2("Ejecutable", d.exe),
+            row2("Datos", d.dir),
+            row2("ffmpeg", d.ffmpeg ? "".concat(d.ffver || d.ffmpeg) : "no encontrado"),
+            row2("ffprobe", d.ffprobe || "no encontrado"),
+            row2("Memoria", "".concat(d.heapMB.toFixed(1), " MB en uso \xB7 ").concat(d.sysMB.toFixed(0), " MB reservados \xB7 ").concat(d.goroutines, " goroutines")),
+            row2("Conversiones", "copia ".concat(d.remux, "/").concat(d.remuxMax, " \xB7 recodificaci\xF3n ").concat(d.x264, "/").concat(d.x264Max)),
+            row2("Directos", d.live.length ? d.live.map((s) => "".concat(s.n, " (").concat(s.v, ") ").concat(s.kbps, " kbps")).join(" | ") : "ninguno")
+          ].flat());
+          convs.replaceChildren(...d.convs.length ? d.convs.map((c) => el("div", { class: "ch" }, el("b", { text: c.title }), " \xB7 ".concat(c.mode, " \xB7 ").concat(c.user || "invitado", " \xB7 desde ").concat(hhmm(c.since * 1e3)))) : [el("p", { class: "hint", text: "Ninguna conversi\xF3n en marcha." })]);
+          lines = d.logs;
+          paint();
+        });
+      }
+      const probeIn = el("input", { class: "inp", placeholder: "Busca una pel\xEDcula o serie\u2026", "aria-label": "V\xEDdeo a analizar" });
+      const probeList = el("div", { class: "dbgp" }), probeOut = el("pre", { class: "dbgl", hidden: true });
+      let pt = 0;
+      probeIn.oninput = () => {
+        clearTimeout(pt);
+        pt = setTimeout(() => __async(null, null, function* () {
+          const q = probeIn.value.trim();
+          if (q.length < 2) {
+            probeList.replaceChildren();
+            return;
+          }
+          try {
+            const r = yield api("/api/search?q=" + encodeURIComponent(q));
+            probeList.replaceChildren(...r.cards.slice(0, 8).map((c) => el("button", { class: "chip", text: c.ti + (c.y ? " (".concat(c.y, ")") : ""), onclick: () => probe(c.th || c.id) })));
+          } catch (e) {
+          }
+        }), 300);
+      };
+      function probe(id) {
+        return __async(this, null, function* () {
+          probeOut.hidden = false;
+          probeOut.textContent = "Analizando\u2026";
+          try {
+            const r = yield api("/api/system/probe/" + encodeURIComponent(id));
+            const L = ["".concat(r.series ? r.series + " \u2014 " : "").concat(r.title), "Archivo: ".concat(r.path), "Plan de reproducci\xF3n: ".concat(r.plan, "  (\xEDndice: v\xEDdeo ").concat(r.vc || "?", ", audio ").concat(r.ac || "?", ")")];
+            if (r.format) L.push("Contenedor: ".concat(r.format.format_name, " \xB7 ").concat(Math.round(r.format.duration || 0), " s \xB7 ").concat(r.format.bit_rate ? Math.round(r.format.bit_rate / 1e3) + " kbps" : ""));
+            (r.streams || []).forEach((t) => {
+              const g = t.tags || {}, dp = t.disposition || {};
+              L.push("  #".concat(t.index, " ").concat(t.codec_type, ": ").concat(t.codec_name).concat(t.profile ? " " + t.profile : "") + (t.codec_type === "video" ? " ".concat(t.width, "x").concat(t.height).concat(t.pix_fmt ? " " + t.pix_fmt : "").concat(t.level > 0 ? " nivel " + t.level : "").concat(dp.attached_pic ? " (car\xE1tula)" : "") : "") + (t.codec_type === "audio" ? " ".concat(t.channel_layout || t.channels + " canales", " ").concat(t.sample_rate || "", " Hz") : "") + (g.language ? " [".concat(g.language, "]") : "") + (g.title ? " \xAB".concat(g.title, "\xBB") : "") + (dp.default ? " (predeterminada)" : ""));
+            });
+            if (r.error) L.push("Error: " + r.error);
+            probeOut.textContent = L.join("\n");
+          } catch (e) {
+            probeOut.textContent = "Error: " + e.message;
+          }
+        });
+      }
+      body.append(
+        el("div", { class: "panel" }, el("h3", { text: "Estado del servidor" }), kv),
+        el("div", { class: "panel" }, el("h3", { text: "Conversiones en marcha" }), convs),
+        el("div", { class: "panel" }, el("h3", { text: "Analizar un v\xEDdeo" }), el("p", { class: "hint", text: "Muestra las pistas del archivo (c\xF3dec, perfil, nivel, audio) y c\xF3mo lo va a reproducir Lumina. \xDAtil cuando un v\xEDdeo sale en negro o sin sonido." }), probeIn, probeList, probeOut),
+        el(
+          "div",
+          { class: "panel" },
+          el("h3", { text: "Registro" }),
+          el("p", { class: "hint", text: "\xDAltimos mensajes del servidor y de los reproductores (l\xEDneas \xABcliente\xBB). Las credenciales del proveedor se ocultan." }),
+          el(
+            "div",
+            { class: "dbgt" },
+            filt,
+            auto,
+            errs,
+            el("button", { class: "btn", onclick: () => {
+              navigator.clipboard && navigator.clipboard.writeText(pre.innerText).then(() => toast("Registro copiado"), () => toast("No se pudo copiar", true));
+            } }, "Copiar"),
+            el("a", { class: "btn", href: "/api/system/debug/log", download: "lumina-registro.txt" }, "Descargar")
+          ),
+          pre
+        )
+      );
+      yield load();
+      pre.scrollTop = pre.scrollHeight;
+      dbgTimer = setInterval(() => {
+        if (!document.body.contains(pre)) {
+          clearInterval(dbgTimer);
+          return;
+        }
+        if (st.auto && !document.hidden) load();
+      }, 3e3);
     });
   }
   function loadProfiles() {

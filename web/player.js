@@ -218,16 +218,16 @@ async function vod(id, opts = {}) {
   });
   v.addEventListener('timeupdate', tick);
   v.addEventListener('ended', onEnded);
-  v.addEventListener('error', onVideoErr);
+  v.addEventListener('error', () => onVideoErr('error del vídeo: ' + verr(v)));
   // vigilante de imagen negra: si el audio avanza pero el decodificador no da vídeo (videoWidth 0), se pasa al modo siguiente
   let bt = 0, at = 0;
   const blk = setInterval(() => {
     if (!st || st.kind !== 'vod' || st.ui.v !== v) { clearInterval(blk); return; }
     if (v.paused || v.ended || v.readyState < 2 || v.currentTime < 0.5) { bt = 0; return; }
     // sin audio: el vídeo se decodifica pero el audio no (AC3/E-AC3/DTS que el navegador no admite) → conversión del audio
-    if (st.mode === 'direct' && st.it.ffmpeg && v.currentTime > 2.5 && noAudio(v)) { if (++at >= 2) { at = 0; onVideoErr(); return; } } else at = 0;
+    if (st.mode === 'direct' && st.it.ffmpeg && v.currentTime > 2.5 && noAudio(v)) { if (++at >= 2) { at = 0; onVideoErr('sin audio'); return; } } else at = 0;
     if (v.videoWidth > 0) { bt = 0; return; }
-    if (++bt >= 3) { bt = 0; onVideoErr(); }
+    if (++bt >= 3) { bt = 0; onVideoErr('imagen negra'); }
   }, 1000);
   load(start);
   if (start > 10 && it.dur) { // aviso de reanudación con opción de empezar de nuevo
@@ -251,13 +251,20 @@ function loadTS(t) {
     const p = mp.createPlayer({ type: 'mpegts', isLive: true, url: `${location.origin}/remux/${st.id}?ss=${t.toFixed(1)}&a=${st.audio}&m=x264&f=ts` },
       { enableWorker: true, liveBufferLatencyChasing: false, lazyLoad: false, autoCleanupSourceBuffer: true, autoCleanupMaxBackwardDuration: 30, autoCleanupMinBackwardDuration: 15 });
     st.mp = p;
-    p.on(mp.Events.ERROR, (a, b, c) => { console.warn('[Lumina] error MSE:', a, b, c && (c.msg || c.code)); fallback(); });
+    p.on(mp.Events.ERROR, (a, b, c) => { console.warn('[Lumina] error MSE:', a, b, c && (c.msg || c.code)); report(`${what()} error del reproductor MSE: ${a} ${b} ${c && (c.msg || c.code) || ''}`); fallback(); });
     p.on(mp.Events.LOADING_COMPLETE, () => { if (st && tok === st.tsTok) st.tsDone = true; });
     p.attachMediaElement(v); p.load();
     const pr = v.play();
     if (pr) pr.catch(e => { if (e.name === 'NotAllowedError') showMsg('Pulsa para reproducir', [{ label: 'Reproducir', pri: true, fn: () => v.play() }]); });
   }, fallback);
 }
+
+// informe al registro del servidor (Ajustes → Depuración)
+function report(msg) {
+  try { fetch('/api/clientlog', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ msg }), keepalive: true }).catch(() => {}); } catch { /* nada */ }
+}
+const what = () => st && st.it ? (st.it.series ? `«${st.it.series}» ${st.it.season}x${st.it.ep}` : `«${st.it.title}»`) : '?';
+const verr = v => { const e = v && v.error; return e ? `código ${e.code}${e.message ? ' ' + e.message : ''}` : 'sin detalle'; };
 
 function noAudio(v) {
   if (typeof v.webkitAudioDecodedByteCount === 'number') return v.webkitAudioDecodedByteCount === 0 && v.webkitVideoDecodedByteCount > 0;
@@ -305,15 +312,18 @@ function tick() {
   if (st.tsDone && !st.ended && d && c > d - 4 && v.buffered.length && v.buffered.end(v.buffered.length - 1) - v.currentTime < 0.6) { st.ended = true; onEnded(); }
 }
 
-function onVideoErr() {
+function onVideoErr(why) {
   if (!st || st.kind !== 'vod') return;
   const order = ['direct', 'remux', 'x264'], i = order.indexOf(st.mode), t = cur();
+  why = typeof why === 'string' ? why : 'error';
   if (st.it.ffmpeg && i < 2) {
+    report(`${what()} ${st.mode} → ${order[i + 1]}: ${why}`);
     st.mode = order[i + 1];
     st.ui.v.querySelectorAll('track').forEach(x => x.remove()); st.ui.cc.hidden = true; // los subtítulos solo van en reproducción directa
     toast(st.mode === 'remux' ? 'Adaptando el audio para tu navegador…' : 'Recodificando el vídeo para tu navegador…');
     load(t); return;
   }
+  report(`${what()} no se puede reproducir (modo ${st.mode}): ${why}`);
   showMsg('Este vídeo no se puede reproducir en este navegador' + (st.it.ffmpeg ? '.' : ' (instala ffmpeg en el servidor para convertirlo al vuelo).'), [{ label: 'Cerrar', pri: true, fn: close }]);
 }
 

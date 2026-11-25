@@ -538,9 +538,9 @@ async function vSettings([tab], q, tok) {
   await refreshMeta();
   if (!S.admin) { location.hash = '#/'; return; }
   const body = el('div');
-  const tabs = el('div', { class: 'tabs' }, [['bib', 'Bibliotecas'], ['tv', 'TV en directo'], ['usr', 'Usuarios'], ['sys', 'Sistema']].map(([k, t]) => el('a', { href: '#/settings/' + k, class: k === tab ? 'on' : '', text: t })));
+  const tabs = el('div', { class: 'tabs' }, [['bib', 'Bibliotecas'], ['tv', 'TV en directo'], ['usr', 'Usuarios'], ['sys', 'Sistema'], ['dbg', 'Depuración']].map(([k, t]) => el('a', { href: '#/settings/' + k, class: k === tab ? 'on' : '', text: t })));
   if (!mount(tok, el('div', { class: 'set' }, el('h1', { text: 'Ajustes' }), tabs, body))) return;
-  if (tab === 'tv') await setTV(body, tok); else if (tab === 'usr') await setUsers(body, tok); else if (tab === 'sys') await setSys(body, tok); else await setLibs(body, tok);
+  if (tab === 'tv') await setTV(body, tok); else if (tab === 'usr') await setUsers(body, tok); else if (tab === 'sys') await setSys(body, tok); else if (tab === 'dbg') await setDbg(body, tok); else await setLibs(body, tok);
 }
 
 function field(label, input) { return el('div', { class: 'fr' }, el('label', { text: label }), input); }
@@ -841,6 +841,83 @@ async function setSys(body, tok) {
     el('dt', { text: 'Acceso' }), el('dd', { text: d.password ? 'Protegido con contraseña' : 'Sin contraseña (cualquiera en tu red puede entrar)' }),
     el('dt', { text: 'Directos activos' }), el('dd', { text: d.live.length ? d.live.map(s => `${s.n} · ${s.v} ${s.v === 1 ? 'espectador' : 'espectadores'} · ${s.kbps} kbps`).join(' | ') : 'Ninguno' }))),
     !d.ffmpeg ? el('div', { class: 'panel' }, el('h3', { text: 'Recomendado: instala ffmpeg' }), el('p', { class: 'hint', text: 'Sin ffmpeg no hay miniaturas generadas, duración, ni conversión automática de audio AC3/DTS o contenedores AVI. Copia ffmpeg y ffprobe junto al ejecutable de Lumina, o instálalos en el sistema.' })) : null));
+}
+
+/* ---------- depuración (solo administradores) ---------- */
+let dbgTimer = 0;
+async function setDbg(body, tok) {
+  clearInterval(dbgTimer);
+  const st = { auto: true, filter: '', errs: false };
+  const kv = el('dl', { class: 'kv', style: 'margin-top:12px' });
+  const convs = el('div', { class: 'dbgc' });
+  const pre = el('pre', { class: 'dbgl', tabindex: '0' });
+  const filt = el('input', { class: 'inp', placeholder: 'Filtrar el registro (p. ej. ffmpeg, nube, cliente)…', 'aria-label': 'Filtrar el registro', oninput: e => { st.filter = e.target.value.toLowerCase(); paint(); } });
+  const auto = el('label', { class: 'chk' }, el('input', { type: 'checkbox', checked: true, onchange: e => { st.auto = e.target.checked; } }), ' Actualizar cada 3 s');
+  const errs = el('label', { class: 'chk' }, el('input', { type: 'checkbox', onchange: e => { st.errs = e.target.checked; paint(); } }), ' Solo errores y avisos');
+  let lines = [];
+  const ERR = /(error|fall|no se pud|sin salida|interrump|aviso|rechaz|HTTP [45]\d\d|imagen negra|sin audio|no se puede)/i;
+  const hhmm = t => new Date(t).toLocaleTimeString('es-ES', { hour12: false });
+  function paint() {
+    const atEnd = pre.scrollHeight - pre.scrollTop - pre.clientHeight < 40;
+    const sel = lines.filter(l => (!st.filter || l.m.toLowerCase().includes(st.filter)) && (!st.errs || ERR.test(l.m)));
+    pre.replaceChildren(...sel.map(l => el('div', { class: ERR.test(l.m) ? 'e' : (l.m.startsWith('cliente') ? 'c' : '') }, el('span', { class: 'ts', text: hhmm(l.t) + ' ' }), l.m)));
+    if (!sel.length) pre.textContent = 'Sin líneas que mostrar.';
+    if (atEnd) pre.scrollTop = pre.scrollHeight;
+  }
+  const up = s => { s = Math.floor(s); const d = Math.floor(s / 86400), h = Math.floor(s % 86400 / 3600), m = Math.floor(s % 3600 / 60); return (d ? d + ' d ' : '') + (h ? h + ' h ' : '') + m + ' min'; };
+  async function load() {
+    let d; try { d = await api('/api/system/debug?n=1000'); } catch (e) { toast(e.message, true); return; }
+    const row = (k, v) => [el('dt', { text: k }), el('dd', { text: v })];
+    kv.replaceChildren(...[
+      row('Versión', `Lumina ${d.version} · ${d.go} · ${d.os} · ${d.cpus} núcleos`),
+      row('Servidor', `${d.host} · encendido ${up(d.uptime)}`),
+      row('Ejecutable', d.exe), row('Datos', d.dir),
+      row('ffmpeg', d.ffmpeg ? `${d.ffver || d.ffmpeg}` : 'no encontrado'),
+      row('ffprobe', d.ffprobe || 'no encontrado'),
+      row('Memoria', `${d.heapMB.toFixed(1)} MB en uso · ${d.sysMB.toFixed(0)} MB reservados · ${d.goroutines} goroutines`),
+      row('Conversiones', `copia ${d.remux}/${d.remuxMax} · recodificación ${d.x264}/${d.x264Max}`),
+      row('Directos', d.live.length ? d.live.map(s => `${s.n} (${s.v}) ${s.kbps} kbps`).join(' | ') : 'ninguno')].flat());
+    convs.replaceChildren(...(d.convs.length ? d.convs.map(c => el('div', { class: 'ch' }, el('b', { text: c.title }), ` · ${c.mode} · ${c.user || 'invitado'} · desde ${hhmm(c.since * 1000)}`)) : [el('p', { class: 'hint', text: 'Ninguna conversión en marcha.' })]));
+    lines = d.logs; paint();
+  }
+  // análisis de un vídeo con ffprobe
+  const probeIn = el('input', { class: 'inp', placeholder: 'Busca una película o serie…', 'aria-label': 'Vídeo a analizar' });
+  const probeList = el('div', { class: 'dbgp' }), probeOut = el('pre', { class: 'dbgl', hidden: true });
+  let pt = 0;
+  probeIn.oninput = () => { clearTimeout(pt); pt = setTimeout(async () => {
+    const q = probeIn.value.trim(); if (q.length < 2) { probeList.replaceChildren(); return; }
+    try { const r = await api('/api/search?q=' + encodeURIComponent(q)); probeList.replaceChildren(...r.cards.slice(0, 8).map(c => el('button', { class: 'chip', text: c.ti + (c.y ? ` (${c.y})` : ''), onclick: () => probe(c.th || c.id) }))); } catch { /* nada */ }
+  }, 300); };
+  async function probe(id) {
+    probeOut.hidden = false; probeOut.textContent = 'Analizando…';
+    try {
+      const r = await api('/api/system/probe/' + encodeURIComponent(id));
+      const L = [`${r.series ? r.series + ' — ' : ''}${r.title}`, `Archivo: ${r.path}`, `Plan de reproducción: ${r.plan}  (índice: vídeo ${r.vc || '?'}, audio ${r.ac || '?'})`];
+      if (r.format) L.push(`Contenedor: ${r.format.format_name} · ${Math.round(r.format.duration || 0)} s · ${r.format.bit_rate ? Math.round(r.format.bit_rate / 1000) + ' kbps' : ''}`);
+      (r.streams || []).forEach(t => {
+        const g = t.tags || {}, dp = t.disposition || {};
+        L.push(`  #${t.index} ${t.codec_type}: ${t.codec_name}${t.profile ? ' ' + t.profile : ''}` +
+          (t.codec_type === 'video' ? ` ${t.width}x${t.height}${t.pix_fmt ? ' ' + t.pix_fmt : ''}${t.level > 0 ? ' nivel ' + t.level : ''}${dp.attached_pic ? ' (carátula)' : ''}` : '') +
+          (t.codec_type === 'audio' ? ` ${t.channel_layout || (t.channels + ' canales')} ${t.sample_rate || ''} Hz` : '') +
+          (g.language ? ` [${g.language}]` : '') + (g.title ? ` «${g.title}»` : '') + (dp.default ? ' (predeterminada)' : ''));
+      });
+      if (r.error) L.push('Error: ' + r.error);
+      probeOut.textContent = L.join('\n');
+    } catch (e) { probeOut.textContent = 'Error: ' + e.message; }
+  }
+  body.append(
+    el('div', { class: 'panel' }, el('h3', { text: 'Estado del servidor' }), kv),
+    el('div', { class: 'panel' }, el('h3', { text: 'Conversiones en marcha' }), convs),
+    el('div', { class: 'panel' }, el('h3', { text: 'Analizar un vídeo' }), el('p', { class: 'hint', text: 'Muestra las pistas del archivo (códec, perfil, nivel, audio) y cómo lo va a reproducir Lumina. Útil cuando un vídeo sale en negro o sin sonido.' }), probeIn, probeList, probeOut),
+    el('div', { class: 'panel' }, el('h3', { text: 'Registro' }),
+      el('p', { class: 'hint', text: 'Últimos mensajes del servidor y de los reproductores (líneas «cliente»). Las credenciales del proveedor se ocultan.' }),
+      el('div', { class: 'dbgt' }, filt, auto, errs,
+        el('button', { class: 'btn', onclick: () => { navigator.clipboard && navigator.clipboard.writeText(pre.innerText).then(() => toast('Registro copiado'), () => toast('No se pudo copiar', true)); } }, 'Copiar'),
+        el('a', { class: 'btn', href: '/api/system/debug/log', download: 'lumina-registro.txt' }, 'Descargar')),
+      pre));
+  await load();
+  pre.scrollTop = pre.scrollHeight;
+  dbgTimer = setInterval(() => { if (!document.body.contains(pre)) { clearInterval(dbgTimer); return; } if (st.auto && !document.hidden) load(); }, 3000);
 }
 
 /* ================= perfiles ================= */

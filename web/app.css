@@ -265,6 +265,11 @@ select.inp{padding-right:28px}
 .seg{display:flex;gap:4px;margin-bottom:16px;flex-wrap:wrap}
 .panel{background:var(--bg2);border-radius:14px;padding:20px;margin-bottom:18px}
 .panel h3{font-size:1.05rem;margin-bottom:4px}
+.dbgl{background:#05090d;border:1px solid var(--line);border-radius:10px;padding:10px 12px;margin-top:12px;max-height:60vh;overflow:auto;font:12.5px/1.5 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;white-space:pre-wrap;word-break:break-word;color:#c9d4dc}
+.dbgl .ts{color:#6b7c89}.dbgl .e{color:#ff9a8a}.dbgl .c{color:#8fd0ff}
+.dbgt{display:flex;flex-wrap:wrap;gap:10px;align-items:center}.dbgt .inp{flex:1 1 260px}
+.dbgp{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}.dbgc .ch{padding:6px 0;border-bottom:1px solid var(--line)}
+.chk{display:inline-flex;align-items:center;gap:6px;color:var(--mut);font-size:.9rem;cursor:pointer}
 .panel .hint{color:var(--mut);font-size:.9rem;margin-bottom:14px}
 .fr{display:grid;gap:6px;margin-bottom:12px}
 .fr label{font-size:.82rem;font-weight:700;color:var(--mut);text-transform:uppercase;letter-spacing:.05em}

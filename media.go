@@ -788,6 +788,22 @@ func (a *App) hRemux(w http.ResponseWriter, r *http.Request) {
 	case <-r.Context().Done():
 		return
 	}
+	mode := "copia"
+	if enc {
+		mode = "x264"
+	}
+	if r.URL.Query().Get("f") == "ts" {
+		mode += " (TS)"
+	}
+	who := ""
+	if u := userFrom(r); u != nil {
+		who = u.Name
+	}
+	title := it.Title
+	if it.Series != "" {
+		title = fmt.Sprintf("%s %dx%02d", it.Series, it.Season, it.Episode)
+	}
+	defer convStart(convInfo{ID: it.ID, Title: title, Mode: mode, User: who})()
 	ctx, cancel := context.WithCancel(r.Context())
 	defer cancel()
 	input, label := it.Path, it.Path
@@ -1267,6 +1283,10 @@ func (a *App) routes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/progress", a.hProgress)
 	mux.HandleFunc("GET /api/fs", a.hFS)
 	mux.HandleFunc("GET /api/system", a.hSystem)
+	mux.HandleFunc("GET /api/system/debug", a.hDebug)
+	mux.HandleFunc("GET /api/system/debug/log", a.hDebugLog)
+	mux.HandleFunc("GET /api/system/probe/{id}", a.hProbe)
+	mux.HandleFunc("POST /api/clientlog", a.hClientLog)
 	mux.HandleFunc("GET /stream/{id}", a.hStream)
 	mux.HandleFunc("GET /remux/{id}", a.hRemux)
 	mux.HandleFunc("GET /sub/{id}/{n}", a.hSub)

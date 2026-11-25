@@ -42,7 +42,7 @@ var __async = (__this, __arguments, generator) => {
   function openUI(kind) {
     var _a;
     teardown(false);
-    const v = el("video", { playsinline: "", preload: "auto" });
+    const v = el("video", { playsinline: "", preload: "auto", poster: "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7" });
     const ui = { v };
     ui.title = el("div", { class: "ptit" });
     ui.sub = el("div", { class: "psub" });
@@ -438,8 +438,8 @@ var __async = (__this, __arguments, generator) => {
       });
       v.addEventListener("timeupdate", tick);
       v.addEventListener("ended", onEnded);
-      v.addEventListener("error", onVideoErr);
-      let bt = 0;
+      v.addEventListener("error", () => onVideoErr("error del v\xEDdeo: " + verr(v)));
+      let bt = 0, at = 0;
       const blk = setInterval(() => {
         if (!st || st.kind !== "vod" || st.ui.v !== v) {
           clearInterval(blk);
@@ -449,13 +449,20 @@ var __async = (__this, __arguments, generator) => {
           bt = 0;
           return;
         }
+        if (st.mode === "direct" && st.it.ffmpeg && v.currentTime > 2.5 && noAudio(v)) {
+          if (++at >= 2) {
+            at = 0;
+            onVideoErr("sin audio");
+            return;
+          }
+        } else at = 0;
         if (v.videoWidth > 0) {
           bt = 0;
           return;
         }
         if (++bt >= 3) {
           bt = 0;
-          onVideoErr();
+          onVideoErr("imagen negra");
         }
       }, 1e3);
       load(start);
@@ -508,6 +515,7 @@ var __async = (__this, __arguments, generator) => {
       st.mp = p;
       p.on(mp.Events.ERROR, (a, b, c) => {
         console.warn("[Lumina] error MSE:", a, b, c && (c.msg || c.code));
+        report("".concat(what(), " error del reproductor MSE: ").concat(a, " ").concat(b, " ").concat(c && (c.msg || c.code) || ""));
         fallback();
       });
       p.on(mp.Events.LOADING_COMPLETE, () => {
@@ -520,6 +528,23 @@ var __async = (__this, __arguments, generator) => {
         if (e.name === "NotAllowedError") showMsg("Pulsa para reproducir", [{ label: "Reproducir", pri: true, fn: () => v.play() }]);
       });
     }, fallback);
+  }
+  function report(msg) {
+    try {
+      fetch("/api/clientlog", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ msg }), keepalive: true }).catch(() => {
+      });
+    } catch (e) {
+    }
+  }
+  const what = () => st && st.it ? st.it.series ? "\xAB".concat(st.it.series, "\xBB ").concat(st.it.season, "x").concat(st.it.ep) : "\xAB".concat(st.it.title, "\xBB") : "?";
+  const verr = (v) => {
+    const e = v && v.error;
+    return e ? "c\xF3digo ".concat(e.code).concat(e.message ? " " + e.message : "") : "sin detalle";
+  };
+  function noAudio(v) {
+    if (typeof v.webkitAudioDecodedByteCount === "number") return v.webkitAudioDecodedByteCount === 0 && v.webkitVideoDecodedByteCount > 0;
+    if (typeof v.mozHasAudio === "boolean") return !v.mozHasAudio;
+    return false;
   }
   function load(t) {
     const v = st.ui.v;
@@ -575,10 +600,12 @@ var __async = (__this, __arguments, generator) => {
       onEnded();
     }
   }
-  function onVideoErr() {
+  function onVideoErr(why) {
     if (!st || st.kind !== "vod") return;
     const order = ["direct", "remux", "x264"], i = order.indexOf(st.mode), t = cur();
+    why = typeof why === "string" ? why : "error";
     if (st.it.ffmpeg && i < 2) {
+      report("".concat(what(), " ").concat(st.mode, " \u2192 ").concat(order[i + 1], ": ").concat(why));
       st.mode = order[i + 1];
       st.ui.v.querySelectorAll("track").forEach((x) => x.remove());
       st.ui.cc.hidden = true;
@@ -586,6 +613,7 @@ var __async = (__this, __arguments, generator) => {
       load(t);
       return;
     }
+    report("".concat(what(), " no se puede reproducir (modo ").concat(st.mode, "): ").concat(why));
     showMsg("Este v\xEDdeo no se puede reproducir en este navegador" + (st.it.ffmpeg ? "." : " (instala ffmpeg en el servidor para convertirlo al vuelo)."), [{ label: "Cerrar", pri: true, fn: close }]);
   }
   function onEnded() {

@@ -412,6 +412,13 @@ main {
 .slide.on .bg {
   transform: scale(1);
 }
+.slide .bg.lo {
+  filter: blur(22px) saturate(1.25) brightness(.85);
+  transform: scale(1.2);
+}
+.slide.on .bg.lo {
+  transform: scale(1.15);
+}
 .slide .shade {
   position: absolute;
   top: 0;
@@ -1134,6 +1141,12 @@ select.inp {
   object-fit: contain;
   background: #000;
 }
+#player video::-webkit-media-controls,
+#player video::-webkit-media-controls-overlay-play-button,
+#player video::-webkit-media-controls-start-playback-button {
+  display: none !important;
+  -webkit-appearance: none;
+}
 #player video::cue {
   background: rgba(0, 0, 0, .65);
   font-size: 1.15em;
@@ -1533,6 +1546,60 @@ select.inp {
 .panel h3 {
   font-size: 1.05rem;
   margin-bottom: 4px;
+}
+.dbgl {
+  background: #05090d;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 10px 12px;
+  margin-top: 12px;
+  max-height: 60vh;
+  overflow: auto;
+  font:
+    12.5px/1.5 ui-monospace,
+    SFMono-Regular,
+    Menlo,
+    Consolas,
+    monospace;
+  white-space: pre-wrap;
+  word-break: break-word;
+  color: #c9d4dc;
+}
+.dbgl .ts {
+  color: #6b7c89;
+}
+.dbgl .e {
+  color: #ff9a8a;
+}
+.dbgl .c {
+  color: #8fd0ff;
+}
+.dbgt {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+}
+.dbgt .inp {
+  flex: 1 1 260px;
+}
+.dbgp {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+}
+.dbgc .ch {
+  padding: 6px 0;
+  border-bottom: 1px solid var(--line);
+}
+.chk {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--mut);
+  font-size: .9rem;
+  cursor: pointer;
 }
 .panel .hint {
   color: var(--mut);
@@ -2227,6 +2294,9 @@ html.tv #toast {
 .ngap .liveb>*{margin-right:6px}
 .ngap .tabs>*{margin-right:6px}
 .ngap .seg>*{margin-right:4px}
+.ngap .dbgt>*{margin-right:10px}
+.ngap .dbgp>*{margin-right:8px}
+.ngap .chk>*{margin-right:6px}
 .ngap .lr>*{margin-right:12px}
 .ngap .cats button>*{margin-right:8px}
 .ngap .tools>*{margin-right:10px}
