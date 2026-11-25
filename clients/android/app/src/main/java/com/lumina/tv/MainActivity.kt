@@ -29,6 +29,7 @@ class MainActivity : Activity() {
     private lateinit var input: EditText
     private lateinit var error: TextView
     private var custom: View? = null
+    private var playing = false
     private var customCb: WebChromeClient.CustomViewCallback? = null
     private val prefs by lazy { getSharedPreferences("lumina", MODE_PRIVATE) }
 
@@ -48,7 +49,7 @@ class MainActivity : Activity() {
         setContentView(root)
         buildWeb()
         buildSetup()
-        hideSystemBars()
+        applySystemBars()
         val saved = prefs.getString("server", null)
         if (saved.isNullOrBlank()) showSetup(null) else load(saved)
     }
@@ -65,6 +66,12 @@ class MainActivity : Activity() {
             // "LumTV" activa el modo mando (foco, teclas) en la web
             userAgentString = userAgentString + if (isTv) " LumTV" else " LumApp"
         }
+        // puente para la web: botón «Cerrar la app» de la barra lateral
+        web.addJavascriptInterface(object {
+            @JavascriptInterface fun exit() { runOnUiThread { finishAndRemoveTask() } }
+            // el reproductor de la web pide pantalla completa al abrirse y la quita al cerrarse
+            @JavascriptInterface fun immersive(on: Boolean) { runOnUiThread { playing = on; applySystemBars() } }
+        }, "LuminaApp")
         web.webViewClient = object : WebViewClient() {
             override fun onReceivedError(v: WebView, r: WebResourceRequest, e: WebResourceError) {
                 if (r.isForMainFrame) showSetup("No se pudo conectar con el servidor (${if (android.os.Build.VERSION.SDK_INT >= 23) e.description else e.errorCode}). Revisa la dirección.")
@@ -74,9 +81,11 @@ class MainActivity : Activity() {
             override fun onShowCustomView(view: View, cb: CustomViewCallback) {
                 custom = view; customCb = cb
                 root.addView(view, ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT)
+                applySystemBars()
             }
             override fun onHideCustomView() {
                 custom?.let { root.removeView(it) }; custom = null; customCb?.onCustomViewHidden(); customCb = null
+                applySystemBars()
             }
         }
         root.addView(web, ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT)
@@ -136,14 +145,23 @@ class MainActivity : Activity() {
         input.requestFocus()
     }
 
-    private fun hideSystemBars() {
+    // Pantalla completa (sin barras del sistema) en la tele siempre; en el móvil solo mientras se ve un vídeo a pantalla
+    // completa o con el reproductor abierto: en los menús se ven las barras y los gestos de Android (inicio, atrás, recientes) funcionan con normalidad.
+    private fun applySystemBars() {
         @Suppress("DEPRECATION")
-        window.decorView.systemUiVisibility = (View.SYSTEM_UI_FLAG_FULLSCREEN or View.SYSTEM_UI_FLAG_HIDE_NAVIGATION or
+        window.decorView.systemUiVisibility = if (isTv || custom != null || playing) (View.SYSTEM_UI_FLAG_FULLSCREEN or View.SYSTEM_UI_FLAG_HIDE_NAVIGATION or
             View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY or View.SYSTEM_UI_FLAG_LAYOUT_STABLE or
             View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN or View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION)
+        else View.SYSTEM_UI_FLAG_VISIBLE
+        if (!isTv) {
+            @Suppress("DEPRECATION")
+            window.statusBarColor = Color.parseColor("#0F171E")
+            @Suppress("DEPRECATION")
+            window.navigationBarColor = Color.parseColor("#0F171E")
+        }
     }
 
-    override fun onWindowFocusChanged(hasFocus: Boolean) { super.onWindowFocusChanged(hasFocus); if (hasFocus) hideSystemBars() }
+    override fun onWindowFocusChanged(hasFocus: Boolean) { super.onWindowFocusChanged(hasFocus); if (hasFocus) applySystemBars() }
     override fun onPause() { super.onPause(); web.onPause() }
     override fun onResume() { super.onResume(); web.onResume() }
     override fun onDestroy() { web.destroy(); super.onDestroy() }

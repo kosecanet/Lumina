@@ -336,7 +336,12 @@ var __async = (__this, __arguments, generator) => {
       S.libs.map((l) => item("#/lib/" + l.id, libIcon(l), l.name)),
       S.live ? item("#/live", "live", "TV en directo") : null,
       el("div", { class: "sp" }),
-      S.admin ? item("#/settings", "cog", "Ajustes") : null
+      S.admin ? item("#/settings", "cog", "Ajustes") : null,
+      // app de Android (móvil/tablet): botón para cerrar la app
+      window.LuminaApp && window.LuminaApp.exit ? el("button", { class: "ni", "aria-label": "Cerrar la app", title: "Cerrar la app", onclick: () => {
+        Player.closeSilent();
+        window.LuminaApp.exit();
+      } }, icon("close"), el("span", { class: "nl", text: "Cerrar la app" })) : null
     ));
     markNav();
   }

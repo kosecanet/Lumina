@@ -57,6 +57,10 @@ var __async = (__this, __arguments, generator) => {
     );
     ui.wrap = el("div", { class: "pw" }, v, ui.top, ui.spin, ui.msg);
     st = { kind, ui, tok: 0, retries: 0 };
+    try {
+      if (window.LuminaApp && LuminaApp.immersive) LuminaApp.immersive(true);
+    } catch (e) {
+    }
     const vol = parseFloat((_a = localStorage.getItem("lvol")) != null ? _a : "1");
     v.volume = isNaN(vol) ? 1 : vol;
     v.addEventListener("waiting", () => ui.spin.hidden = false);
@@ -280,6 +284,10 @@ var __async = (__this, __arguments, generator) => {
     }
     root.replaceChildren();
     root.hidden = true;
+    try {
+      if (window.LuminaApp && LuminaApp.immersive && !st) LuminaApp.immersive(false);
+    } catch (e) {
+    }
     document.body.classList.remove("noscroll");
     document.removeEventListener("keydown", onKey, true);
     if (document.fullscreenElement) document.exitFullscreen().catch(() => {

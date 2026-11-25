@@ -33,6 +33,7 @@ function openUI(kind) {
     kind === 'live' ? el('span', { class: 'liveb', style: 'margin-left:auto', text: 'EN DIRECTO' }) : null);
   ui.wrap = el('div', { class: 'pw' }, v, ui.top, ui.spin, ui.msg);
   st = { kind, ui, tok: 0, retries: 0 };
+  try { if (window.LuminaApp && LuminaApp.immersive) LuminaApp.immersive(true); } catch { /* app antigua */ }
 
   const vol = parseFloat(localStorage.getItem('lvol') ?? '1');
   v.volume = isNaN(vol) ? 1 : vol;
@@ -127,6 +128,7 @@ function teardown(save) {
   if (s.mp) { try { s.mp.pause(); s.mp.unload(); s.mp.detachMediaElement(); s.mp.destroy(); } catch { /* ya liberado */ } }
   try { s.ui.v.pause(); s.ui.v.removeAttribute('src'); s.ui.v.load(); } catch { /* nada */ }
   root.replaceChildren(); root.hidden = true;
+  try { if (window.LuminaApp && LuminaApp.immersive && !st) LuminaApp.immersive(false); } catch { /* app antigua */ }
   document.body.classList.remove('noscroll');
   document.removeEventListener('keydown', onKey, true);
   if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
