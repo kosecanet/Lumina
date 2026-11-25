@@ -961,7 +961,11 @@ func (a *App) hKeyframe(w http.ResponseWriter, r *http.Request) {
 	k, d := t, 0.0
 	args := append([]string{"-v", "error", "-select_streams", "v:0", "-show_entries", "packet=pts_time,dts_time,flags", "-of", "csv=p=0",
 		"-read_intervals", fmt.Sprintf("%.3f%%%.3f", math.Max(0, t-30), t+0.05)}, pre...)
-	if out, err := exec.CommandContext(ctx, a.ffprobe, append(args, in)...).Output(); err == nil {
+	t0 := time.Now()
+	out, err := exec.CommandContext(ctx, a.ffprobe, append(args, in)...).Output()
+	if err != nil {
+		log.Printf("salto en «%s» a %.1f s: no se pudo localizar el fotograma clave (%v); el audio puede quedar desfasado", it.Title, t, err)
+	} else {
 		best, bestD := -1.0, 0.0
 		for _, ln := range strings.Split(string(out), "\n") {
 			f := strings.Split(strings.TrimSpace(ln), ",")
@@ -981,6 +985,9 @@ func (a *App) hKeyframe(w http.ResponseWriter, r *http.Request) {
 			if bestD > 0 && bestD < 0.5 {
 				d = bestD
 			}
+			log.Printf("salto en «%s» a %.1f s → fotograma clave %.2f s (+%.0f ms) en %d ms", it.Title, t, k, d*1000, time.Since(t0).Milliseconds())
+		} else {
+			log.Printf("salto en «%s» a %.1f s: sin fotograma clave en los 30 s anteriores", it.Title, t)
 		}
 	}
 	writeJSON(w, r, map[string]any{"k": k, "d": d})
