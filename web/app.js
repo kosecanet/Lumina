@@ -291,6 +291,15 @@ function hero(items) {
           el('a', { class: 'btn pri', href: cardHref(c) + '?play=1' }, icon('play'), 'Reproducir'),
           el('a', { class: 'btn', href: cardHref(c) }, icon('info'), 'Más información'))));
     img.onerror = () => { img.remove(); s.style.cssText = grad(c.ti) + ';background:var(--g)'; };
+    // imágenes pequeñas (carátulas de la nube): se difuminan en vez de verse pixeladas
+    img.onload = () => img.classList.toggle('lo', img.naturalWidth > 0 && img.naturalWidth < 1000 && !img.src.includes('image.tmdb.org'));
+    // fondo panorámico de TMDB si hay clave configurada
+    if (c.th) api('/api/meta/' + c.th).then(r => {
+      const bd = r && r.meta && r.meta.bd;
+      if (!bd) return;
+      s.dataset.src = bd;
+      if (img.src) { const n = new Image(); n.onload = () => { img.src = bd; }; n.src = bd; }
+    }).catch(() => {});
     return s;
   });
   const dots = items.map((_, i) => el('button', { 'aria-label': 'Ir a ' + (i + 1), onclick: () => { show(i); restart(); } }));

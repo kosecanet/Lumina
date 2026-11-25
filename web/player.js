@@ -22,7 +22,8 @@ function loadMpegts() {
 /* ---------- interfaz común ---------- */
 function openUI(kind) {
   teardown(false);
-  const v = el('video', { playsinline: '', preload: 'auto' });
+  // poster transparente: sin él, el WebView de Android y webOS pintan un icono de «play» gris de fondo
+  const v = el('video', { playsinline: '', preload: 'auto', poster: 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7' });
   const ui = { v };
   ui.title = el('div', { class: 'ptit' });
   ui.sub = el('div', { class: 'psub' });
@@ -219,10 +220,12 @@ async function vod(id, opts = {}) {
   v.addEventListener('ended', onEnded);
   v.addEventListener('error', onVideoErr);
   // vigilante de imagen negra: si el audio avanza pero el decodificador no da vídeo (videoWidth 0), se pasa al modo siguiente
-  let bt = 0;
+  let bt = 0, at = 0;
   const blk = setInterval(() => {
     if (!st || st.kind !== 'vod' || st.ui.v !== v) { clearInterval(blk); return; }
     if (v.paused || v.ended || v.readyState < 2 || v.currentTime < 0.5) { bt = 0; return; }
+    // sin audio: el vídeo se decodifica pero el audio no (AC3/E-AC3/DTS que el navegador no admite) → conversión del audio
+    if (st.mode === 'direct' && st.it.ffmpeg && v.currentTime > 2.5 && noAudio(v)) { if (++at >= 2) { at = 0; onVideoErr(); return; } } else at = 0;
     if (v.videoWidth > 0) { bt = 0; return; }
     if (++bt >= 3) { bt = 0; onVideoErr(); }
   }, 1000);
@@ -254,6 +257,12 @@ function loadTS(t) {
     const pr = v.play();
     if (pr) pr.catch(e => { if (e.name === 'NotAllowedError') showMsg('Pulsa para reproducir', [{ label: 'Reproducir', pri: true, fn: () => v.play() }]); });
   }, fallback);
+}
+
+function noAudio(v) {
+  if (typeof v.webkitAudioDecodedByteCount === 'number') return v.webkitAudioDecodedByteCount === 0 && v.webkitVideoDecodedByteCount > 0;
+  if (typeof v.mozHasAudio === 'boolean') return !v.mozHasAudio;
+  return false;
 }
 
 function load(t) {

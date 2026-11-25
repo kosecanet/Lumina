@@ -458,15 +458,28 @@ func textSub(c string) bool {
 	return false
 }
 
+// browserAudio: códecs de audio que reproduce cualquier navegador moderno.
+func browserAudio(c string) bool {
+	switch c {
+	case "", "aac", "mp3", "opus", "vorbis", "flac":
+		return true
+	}
+	return false
+}
+
 func plan(it *Item, hasFFmpeg bool) string {
-	if !hasFFmpeg || isCloud(it) {
+	if !hasFFmpeg {
 		return "direct"
+	}
+	if isCloud(it) { // la nube va directa salvo audio que el navegador no admite (AC3, E-AC3, DTS…): se convierte el audio
+		if browserAudio(it.AC) {
+			return "direct"
+		}
+		return "remux"
 	}
 	ext := strings.ToLower(filepath.Ext(it.Path))
 	okC := ext == ".mp4" || ext == ".m4v" || ext == ".mov" || ext == ".webm" || ext == ".mkv"
-	switch it.AC {
-	case "", "aac", "mp3", "opus", "vorbis", "flac":
-	default:
+	if !browserAudio(it.AC) {
 		okC = false
 	}
 	if okC {
@@ -775,8 +788,42 @@ func (a *App) hRemux(w http.ResponseWriter, r *http.Request) {
 	case <-r.Context().Done():
 		return
 	}
+	ctx, cancel := context.WithCancel(r.Context())
+	defer cancel()
+	input, label := it.Path, it.Path
+	var inArgs []string
+	if isCloud(it) { // episodio de la nube: ffmpeg lee del proveedor ocupando una de sus conexiones
+		u, c, err := a.cloudURL(it.Path)
+		if err != nil {
+			jsonErr(w, 502, err.Error())
+			return
+		}
+		ls, sub, busy := a.hub.vodAcquire(cloudKey(it), "«"+it.Series+"»", false)
+		if busy != nil {
+			busyJSON(w, busy, a.maxConn())
+			return
+		}
+		defer a.hub.release(ls, sub)
+		go func() {
+			select {
+			case <-ls.ctx.Done():
+				cancel()
+			case <-ctx.Done():
+			}
+		}()
+		if ls.swapCur(cancel) {
+			select {
+			case <-time.After(350 * time.Millisecond):
+			case <-ctx.Done():
+				return
+			}
+		}
+		input, label = u, "nube:"+strings.TrimPrefix(it.Path, "cloud:")
+		inArgs = []string{"-user_agent", c.ua, "-reconnect", "1", "-reconnect_streamed", "1", "-reconnect_delay_max", "4", "-rw_timeout", "20000000"}
+	}
 	ss, _ := strconv.ParseFloat(r.URL.Query().Get("ss"), 64)
 	args := []string{"-hide_banner", "-loglevel", "error", "-nostdin", "-probesize", "10M", "-analyzeduration", "5M"}
+	args = append(args, inArgs...)
 	if ss > 0 {
 		args = append(args, "-ss", fmt.Sprintf("%.3f", ss))
 	}
@@ -784,7 +831,7 @@ func (a *App) hRemux(w http.ResponseWriter, r *http.Request) {
 	if ai < 0 || ai > 63 {
 		ai = 0
 	}
-	args = append(args, "-fflags", "+genpts", "-i", it.Path, "-map", "0:v:0", "-map", fmt.Sprintf("0:a:%d?", ai), "-sn", "-dn", "-map_chapters", "-1", "-map_metadata", "-1")
+	args = append(args, "-fflags", "+genpts", "-i", input, "-map", "0:v:0", "-map", fmt.Sprintf("0:a:%d?", ai), "-sn", "-dn", "-map_chapters", "-1", "-map_metadata", "-1")
 	if enc {
 		args = append(args, "-c:v", "libx264", "-preset", "veryfast", "-crf", "23", "-maxrate", "10M", "-bufsize", "20M",
 			"-profile:v", "high", "-level", "4.1", "-pix_fmt", "yuv420p", "-vf", "scale='min(1920,iw)':-2", "-g", "48", "-sc_threshold", "0")
@@ -805,8 +852,6 @@ func (a *App) hRemux(w http.ResponseWriter, r *http.Request) {
 	} else {
 		args = append(args, "-movflags", "frag_keyframe+empty_moov+default_base_moof", "-f", "mp4", "pipe:1")
 	}
-	ctx, cancel := context.WithCancel(r.Context())
-	defer cancel()
 	cmd := exec.CommandContext(ctx, a.ffmpeg, args...)
 	var stderr limitBuf
 	cmd.Stderr = &stderr
@@ -824,7 +869,8 @@ func (a *App) hRemux(w http.ResponseWriter, r *http.Request) {
 	n, rerr := io.ReadAtLeast(out, buf, 1)
 	if n == 0 {
 		_ = cmd.Wait()
-		log.Printf("ffmpeg (%s) sin salida: %s", it.Path, stderr.String())
+		// el error de ffmpeg puede incluir la URL del proveedor (con usuario y contraseña): se oculta
+		log.Printf("ffmpeg (%s) sin salida: %s", label, strings.ReplaceAll(stderr.String(), input, label))
 		jsonErr(w, 500, "no se pudo convertir este vídeo")
 		return
 	}

@@ -28,6 +28,8 @@ type Meta struct {
 	Cast     []string `json:"cast,omitempty"`
 	Director string   `json:"director,omitempty"` // en series: creadores
 	Source   string   `json:"source,omitempty"`   // TMDB | Wikipedia
+	Backdrop string   `json:"bd,omitempty"`       // imagen de fondo grande (TMDB, 1280 px)
+	Img      int      `json:"img,omitempty"`      // 1: ya se buscó la imagen de fondo
 	At       int64    `json:"at"`
 }
 
@@ -75,15 +77,21 @@ func (a *App) metaFor(kind, title string, year int) *Meta {
 	metaState.mu.Lock()
 	defer metaState.mu.Unlock()
 	a.metaLoadLocked()
-	if m := metaState.found[key]; m != nil {
+	if m := metaState.found[key]; m != nil && (m.Source != "TMDB" || m.Img == 1) {
 		return m
 	}
+	old := metaState.found[key] // ficha de TMDB guardada antes de existir las imágenes de fondo: se vuelve a pedir una vez
 	if t := metaState.miss[key]; t > 0 && time.Now().Unix()-t < 6*3600 {
 		return nil
 	}
 	var m *Meta
 	if k := a.tmdbKey(); k != "" {
 		m, _ = tmdbFetch(k, kind, title, year)
+	}
+	if m == nil && old != nil {
+		old.Img = 1
+		a.metaSaveLocked()
+		return old
 	}
 	if m == nil { // sin clave, o TMDB sin resultado: Wikipedia en español
 		m, _ = wikiFetch(kind, title, year)
@@ -195,6 +203,7 @@ func tmdbFetch(key, kind, title string, year int) (*Meta, error) {
 		Genres       []struct {
 			Name string `json:"name"`
 		} `json:"genres"`
+		Backdrop  string `json:"backdrop_path"`
 		CreatedBy []struct {
 			Name string `json:"name"`
 		} `json:"created_by"`
@@ -211,7 +220,10 @@ func tmdbFetch(key, kind, title string, year int) (*Meta, error) {
 	if err := getJSON(u, h, &d); err != nil {
 		return nil, err
 	}
-	m := &Meta{Title: d.Title, Overview: strings.TrimSpace(d.Overview), Tagline: strings.TrimSpace(d.Tagline), Rating: float64(int(d.Vote*10+0.5)) / 10, Runtime: d.Runtime, Source: "TMDB"}
+	m := &Meta{Title: d.Title, Overview: strings.TrimSpace(d.Overview), Tagline: strings.TrimSpace(d.Tagline), Rating: float64(int(d.Vote*10+0.5)) / 10, Runtime: d.Runtime, Source: "TMDB", Img: 1}
+	if d.Backdrop != "" {
+		m.Backdrop = "https://image.tmdb.org/t/p/w1280" + d.Backdrop
+	}
 	if kind == "tv" {
 		m.Title = d.Name
 		if len(d.EpRuntime) > 0 {
