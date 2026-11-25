@@ -554,6 +554,16 @@ func (a *App) hLiveStream(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
+	mode := r.URL.Query().Get("clean")
+	if mode == "" {
+		mode = "0"
+	}
+	cw := &countWriter{ResponseWriter: w}
+	w = cw
+	defer func() {
+		log.Printf("directo: canal %d → %s [%s] modo %s: %s, %d KB en %.1fs", id, clientIP(r), clientKind(r.UserAgent()), mode,
+			cw.result(), cw.n>>10, time.Since(t0).Seconds())
+	}()
 	ls, sub, busy, err := a.hub.acquire(id)
 	if err != nil {
 		jsonErr(w, 400, err.Error())
@@ -579,7 +589,7 @@ func (a *App) hLiveStream(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("X-Accel-Buffering", "no")
 	rc := http.NewResponseController(w)
 	tReady := time.Since(t0)
-	if mode := r.URL.Query().Get("clean"); (mode == "1" || mode == "2") && a.ffmpeg != "" {
+	if (mode == "1" || mode == "2") && a.ffmpeg != "" {
 		a.cleanLive(w, r, rc, sub, mode == "2", id, tReady)
 		return
 	}
@@ -625,6 +635,8 @@ func (a *App) cleanLive(w http.ResponseWriter, r *http.Request, rc *http.Respons
 		args = append(args, "-muxdelay", "0", "-flush_packets", "1", "-f", "mpegts", "pipe:1")
 	}
 	cmd := exec.CommandContext(ctx, a.ffmpeg, args...)
+	var stderr limitBuf
+	cmd.Stderr = &stderr
 	in, err := cmd.StdinPipe()
 	if err != nil {
 		return
@@ -637,7 +649,13 @@ func (a *App) cleanLive(w http.ResponseWriter, r *http.Request, rc *http.Respons
 		log.Printf("directo: no se pudo lanzar ffmpeg: %v", err)
 		return
 	}
-	defer func() { cancel(); _ = cmd.Wait() }()
+	defer func() {
+		cancel()
+		_ = cmd.Wait()
+		if first && r.Context().Err() == nil {
+			log.Printf("directo: canal %d: ffmpeg no produjo vídeo: %s", id, stderr.String())
+		}
+	}()
 	go func() {
 		defer in.Close()
 		for {
@@ -673,4 +691,37 @@ func (a *App) cleanLive(w http.ResponseWriter, r *http.Request, rc *http.Respons
 			return
 		}
 	}
+}
+
+// countWriter cuenta lo enviado al cliente y el código de respuesta (para el registro de depuración del directo).
+type countWriter struct {
+	http.ResponseWriter
+	n    int64
+	code int
+}
+
+func (c *countWriter) WriteHeader(code int) {
+	c.code = code
+	c.ResponseWriter.WriteHeader(code)
+}
+
+func (c *countWriter) Write(b []byte) (int, error) {
+	if c.code == 0 {
+		c.code = 200
+	}
+	n, err := c.ResponseWriter.Write(b)
+	c.n += int64(n)
+	return n, err
+}
+
+func (c *countWriter) Unwrap() http.ResponseWriter { return c.ResponseWriter }
+
+func (c *countWriter) result() string {
+	switch {
+	case c.code == 0:
+		return "sin respuesta"
+	case c.code != 200:
+		return fmt.Sprintf("HTTP %d", c.code)
+	}
+	return "HTTP 200 " + c.Header().Get("Content-Type")
 }
