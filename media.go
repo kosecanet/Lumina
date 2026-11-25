@@ -885,6 +885,9 @@ func (a *App) hRemux(w http.ResponseWriter, r *http.Request) {
 	n, rerr := io.ReadAtLeast(out, buf, 1)
 	if n == 0 {
 		_ = cmd.Wait()
+		if ctx.Err() != nil { // el reproductor pidió otro tramo (salto) o se cerró: no es un error
+			return
+		}
 		// el error de ffmpeg puede incluir la URL del proveedor (con usuario y contraseña): se oculta
 		log.Printf("ffmpeg (%s) sin salida: %s", label, strings.ReplaceAll(stderr.String(), input, label))
 		jsonErr(w, 500, "no se pudo convertir este vídeo")
