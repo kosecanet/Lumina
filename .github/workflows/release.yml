@@ -1,15 +1,44 @@
 name: Release
-# Publica una release al subir una etiqueta:  git tag v0.3.0 && git push origin v0.3.0
-# Lumina (instalado) detecta la release, verifica checksums.txt y se actualiza solo.
+# Cada push a main compila y publica una release nueva (v0.X.Y+1) y borra las anteriores:
+# en GitHub queda una sola release, la última. Lumina (instalado) la detecta y se actualiza solo.
+#   - "[minor]" en el mensaje del commit sube la versión menor (v0.5.9 → v0.6.0); "[major]", la mayor.
+#   - "[skip release]" en el mensaje: no se publica nada.
+#   - También funciona subiendo una etiqueta a mano (git tag v1.0.0 && git push origin v1.0.0)
+#     o desde la pestaña Actions → Release → Run workflow.
 on:
-  push: { tags: ['v*'] }
+  push:
+    branches: [main]
+    tags: ['v*']
+    paths-ignore: ['**.md', 'docs/**', '.github/workflows/ci.yml']
+  workflow_dispatch:
 permissions:
   contents: write
+concurrency: { group: release, cancel-in-progress: false }
+env:
+  KEEP: 1 # releases que se conservan (las más recientes)
 jobs:
   build:
+    if: ${{ !contains(github.event.head_commit.message, '[skip release]') }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+      - name: Versión
+        env: { GH_TOKEN: '${{ github.token }}', MSG: '${{ github.event.head_commit.message }}' }
+        run: |
+          if [ "${GITHUB_REF_TYPE}" = tag ]; then VER="${GITHUB_REF_NAME}"; else
+            last=$(git tag -l 'v[0-9]*' --sort=-v:refname | head -n1)
+            [ -n "$last" ] || last=v0.0.0
+            IFS=. read -r ma mi pa <<< "${last#v}"
+            case "$MSG" in
+              *"[major]"*) ma=$((ma+1)); mi=0; pa=0 ;;
+              *"[minor]"*) mi=$((mi+1)); pa=0 ;;
+              *) pa=$((pa+1)) ;;
+            esac
+            VER="v$ma.$mi.$pa"
+          fi
+          echo "VER=$VER" >> "$GITHUB_ENV"
+          echo "Versión: $VER"
       - uses: actions/setup-go@v5
         with: { go-version: '1.24' }
       - uses: actions/setup-node@v4
@@ -19,30 +48,37 @@ jobs:
           npm i --no-save esbuild @webos-tools/cli
           node tools/legacy/build.mjs node_modules/.bin/esbuild
           go vet ./... && go test ./...
-          ./build.sh "${GITHUB_REF_NAME}"
+          ./build.sh "$VER"
       - name: Cliente LG webOS (.ipk)
         continue-on-error: true
         run: |
           node_modules/.bin/ares-package clients/webos -o dist
-          mv dist/*.ipk "dist/lumina-webos-${GITHUB_REF_NAME}.ipk"
+          mv dist/*.ipk "dist/lumina-webos-$VER.ipk"
       - uses: actions/setup-java@v4
         with: { distribution: temurin, java-version: 17 }
       - name: Cliente Android / Fire TV (.apk)
         continue-on-error: true
         working-directory: clients/android
         run: |
-          # el runner ya trae el SDK de Android; solo se aceptan las licencias
           yes | "${ANDROID_HOME:-/usr/local/lib/android/sdk}/cmdline-tools/latest/bin/sdkmanager" --licenses >/dev/null 2>&1 || true
           chmod +x gradlew
-          ./gradlew assembleDebug -PversionName="${GITHUB_REF_NAME#v}"
-          cp app/build/outputs/apk/debug/app-debug.apk "../../dist/lumina-android-${GITHUB_REF_NAME}.apk"
+          ./gradlew assembleDebug -PversionName="${VER#v}"
+          cp app/build/outputs/apk/debug/app-debug.apk "../../dist/lumina-android-$VER.apk"
       - name: Sumas de verificación
         run: cd dist && rm -f checksums.txt && sha256sum lumina-linux-* lumina-windows-* > checksums.txt && cat checksums.txt
       - name: Publicar release
         env: { GH_TOKEN: '${{ github.token }}' }
         run: |
-          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
-            gh release upload "$GITHUB_REF_NAME" dist/lumina-* dist/checksums.txt --clobber
+          if gh release view "$VER" >/dev/null 2>&1; then
+            gh release upload "$VER" dist/lumina-* dist/checksums.txt --clobber
           else
-            gh release create "$GITHUB_REF_NAME" dist/lumina-* dist/checksums.txt --title "Lumina ${GITHUB_REF_NAME}" --generate-notes
+            gh release create "$VER" dist/lumina-* dist/checksums.txt --target "$GITHUB_SHA" --title "Lumina $VER" --generate-notes
           fi
+      - name: Borrar releases antiguas
+        env: { GH_TOKEN: '${{ github.token }}' }
+        run: |
+          gh release list --limit 100 --json tagName,createdAt -q 'sort_by(.createdAt) | reverse | .[].tagName' |
+            tail -n +$((KEEP+1)) | while read -r t; do
+              [ "$t" = "$VER" ] && continue
+              echo "borrando $t"; gh release delete "$t" --cleanup-tag -y || true
+            done
