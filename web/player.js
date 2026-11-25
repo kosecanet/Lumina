@@ -134,7 +134,7 @@ function teardown(save) {
 
 /* ================= VÍDEO BAJO DEMANDA ================= */
 const dur = () => (st.dur || (isFinite(st.ui.v.duration) ? st.ui.v.duration : 0));
-const cur = () => st.base + (st.ui.v.currentTime || 0);
+const cur = () => st.wait != null ? st.wait : st.base + (st.ui.v.currentTime || 0); // st.wait: buscando el fotograma clave
 
 function saveProgress() {
   if (!st || st.kind !== 'vod' || !st.ui.v.src) return;
@@ -243,7 +243,7 @@ function killMp() { if (st && st.mp) { try { st.mp.pause(); st.mp.unload(); st.m
 // televisores: la conversión se envía como MPEG-TS al reproductor MSE (el mismo que el directo, que sí funciona en LG)
 function loadTS(t) {
   const v = st.ui.v, tok = st.tsTok = (st.tsTok || 0) + 1;
-  killMp(); st.base = t; st.pend = null; st.tsDone = false; st.ui.spin.hidden = false; hideMsg();
+  killMp(); st.base = t; st.wait = null; st.pend = null; st.tsDone = false; st.ui.spin.hidden = false; hideMsg();
   const fallback = () => { if (!st || tok !== st.tsTok) return; killMp(); st.noTS = true; load(cur()); };
   loadMpegts().then(mp => {
     if (!st || tok !== st.tsTok) return;
@@ -278,9 +278,21 @@ function load(t) {
   killMp();
   st.base = 0; st.pend = null; st.ui.spin.hidden = false; hideMsg();
   v.preload = 'auto';
+  const lt = st.loadTok = (st.loadTok || 0) + 1;
+  const go = (k, d) => {
+    if (!st || lt !== st.loadTok) return;
+    st.wait = null; st.base = k; v.src = `/remux/${st.id}?ss=${k.toFixed(3)}&a=${st.audio}` + (st.mode === 'x264' ? '&m=x264' : (d ? '&d=' + d.toFixed(3) : ''));
+    applySub(); playV(v);
+  };
+  st.wait = null;
   if (st.mode === 'direct') { v.src = '/stream/' + st.id + (t > 1 ? '#t=' + t.toFixed(1) : ''); st.startAt = 0; }  // #t=: el navegador pide directamente ese tramo
-  else { st.base = t; v.src = `/remux/${st.id}?ss=${t.toFixed(1)}&a=${st.audio}` + (st.mode === 'x264' ? '&m=x264' : ''); }
-  applySub();
+  // copia del vídeo: se empieza en el fotograma clave anterior (si no, el audio queda desfasado)
+  else if (st.mode === 'remux' && t > 1) { st.wait = t; v.pause(); v.removeAttribute('src'); api(`/api/keyframe/${st.id}?t=${t.toFixed(3)}`).then(r => go(typeof r.k === 'number' ? r.k : t, r.d || 0), () => go(t)); return; }
+  else return go(t);
+  applySub(); playV(v);
+}
+
+function playV(v) {
   const p = v.play();
   if (p) p.catch(e => { if (e.name === 'NotAllowedError') showMsg('Pulsa para reproducir', [{ label: 'Reproducir', pri: true, fn: () => v.play() }]); });
 }

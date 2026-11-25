@@ -286,7 +286,7 @@ var __async = (__this, __arguments, generator) => {
     });
   }
   const dur = () => st.dur || (isFinite(st.ui.v.duration) ? st.ui.v.duration : 0);
-  const cur = () => st.base + (st.ui.v.currentTime || 0);
+  const cur = () => st.wait != null ? st.wait : st.base + (st.ui.v.currentTime || 0);
   function saveProgress() {
     if (!st || st.kind !== "vod" || !st.ui.v.src) return;
     const c = cur(), d = dur();
@@ -495,6 +495,7 @@ var __async = (__this, __arguments, generator) => {
     const v = st.ui.v, tok = st.tsTok = (st.tsTok || 0) + 1;
     killMp();
     st.base = t;
+    st.wait = null;
     st.pend = null;
     st.tsDone = false;
     st.ui.spin.hidden = false;
@@ -555,14 +556,30 @@ var __async = (__this, __arguments, generator) => {
     st.ui.spin.hidden = false;
     hideMsg();
     v.preload = "auto";
+    const lt = st.loadTok = (st.loadTok || 0) + 1;
+    const go = (k, d) => {
+      if (!st || lt !== st.loadTok) return;
+      st.wait = null;
+      st.base = k;
+      v.src = "/remux/".concat(st.id, "?ss=").concat(k.toFixed(3), "&a=").concat(st.audio) + (st.mode === "x264" ? "&m=x264" : d ? "&d=" + d.toFixed(3) : "");
+      applySub();
+      playV(v);
+    };
+    st.wait = null;
     if (st.mode === "direct") {
       v.src = "/stream/" + st.id + (t > 1 ? "#t=" + t.toFixed(1) : "");
       st.startAt = 0;
-    } else {
-      st.base = t;
-      v.src = "/remux/".concat(st.id, "?ss=").concat(t.toFixed(1), "&a=").concat(st.audio) + (st.mode === "x264" ? "&m=x264" : "");
-    }
+    } else if (st.mode === "remux" && t > 1) {
+      st.wait = t;
+      v.pause();
+      v.removeAttribute("src");
+      api("/api/keyframe/".concat(st.id, "?t=").concat(t.toFixed(3))).then((r) => go(typeof r.k === "number" ? r.k : t, r.d || 0), () => go(t));
+      return;
+    } else return go(t);
     applySub();
+    playV(v);
+  }
+  function playV(v) {
     const p = v.play();
     if (p) p.catch((e) => {
       if (e.name === "NotAllowedError") showMsg("Pulsa para reproducir", [{ label: "Reproducir", pri: true, fn: () => v.play() }]);

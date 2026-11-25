@@ -857,8 +857,13 @@ func (a *App) hRemux(w http.ResponseWriter, r *http.Request) {
 			args = append(args, "-tag:v", "hvc1")
 		}
 	}
-	// aresample async mantiene el audio sincronizado tras cortes o timestamps irregulares
-	args = append(args, "-c:a", "aac", "-b:a", "192k", "-ac", "2", "-af", "aresample=async=1:first_pts=0",
+	// aresample async mantiene el audio sincronizado tras cortes o timestamps irregulares; en la copia el audio se
+	// retrasa lo mismo que el primer fotograma (d, de /api/keyframe) para que el navegador no lo adelante
+	af := "aresample=async=1:first_pts=0"
+	if d, _ := strconv.ParseFloat(r.URL.Query().Get("d"), 64); !enc && d > 0.001 && d < 0.5 {
+		af += fmt.Sprintf(",adelay=delays=%d:all=1", int(d*1000+0.5))
+	}
+	args = append(args, "-c:a", "aac", "-b:a", "192k", "-ac", "2", "-af", af,
 		"-max_muxing_queue_size", "2048")
 	ctype := "video/mp4"
 	if r.URL.Query().Get("f") == "ts" {
@@ -912,6 +917,73 @@ func (a *App) hRemux(w http.ResponseWriter, r *http.Request) {
 	}
 	cancel()
 	_ = cmd.Wait()
+}
+
+// GET /api/keyframe/{id}?t=: fotograma clave anterior a t. En la conversión por copia el vídeo solo puede
+// empezar en un fotograma clave; si el audio empieza en t, el navegador los desfasa. Empezando los dos
+// en el fotograma clave quedan sincronizados y el reproductor sabe en qué segundo empieza de verdad.
+func (a *App) hKeyframe(w http.ResponseWriter, r *http.Request) {
+	it := a.item(r.PathValue("id"))
+	if it == nil {
+		jsonErr(w, 404, "no encontrado")
+		return
+	}
+	t, _ := strconv.ParseFloat(r.URL.Query().Get("t"), 64)
+	if !(t > 1) || a.ffprobe == "" { // también descarta NaN
+		writeJSON(w, r, map[string]any{"k": math.Max(0, t)})
+		return
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), 15*time.Second)
+	defer cancel()
+	in := it.Path
+	var pre []string
+	if isCloud(it) { // usa la conexión del proveedor (corta la conversión anterior de esa serie, que se va a sustituir)
+		u, c, err := a.cloudURL(it.Path)
+		if err != nil {
+			jsonErr(w, 502, err.Error())
+			return
+		}
+		ls, sub, busy := a.hub.vodAcquire(cloudKey(it), "«"+it.Series+"»", false)
+		if busy != nil {
+			busyJSON(w, busy, a.maxConn())
+			return
+		}
+		defer a.hub.release(ls, sub)
+		if ls.swapCur(cancel) {
+			select {
+			case <-time.After(350 * time.Millisecond):
+			case <-ctx.Done():
+				return
+			}
+		}
+		in, pre = u, []string{"-user_agent", c.ua}
+	}
+	k, d := t, 0.0
+	args := append([]string{"-v", "error", "-select_streams", "v:0", "-show_entries", "packet=pts_time,dts_time,flags", "-of", "csv=p=0",
+		"-read_intervals", fmt.Sprintf("%.3f%%%.3f", math.Max(0, t-30), t+0.05)}, pre...)
+	if out, err := exec.CommandContext(ctx, a.ffprobe, append(args, in)...).Output(); err == nil {
+		best, bestD := -1.0, 0.0
+		for _, ln := range strings.Split(string(out), "\n") {
+			f := strings.Split(strings.TrimSpace(ln), ",")
+			if len(f) < 3 || !strings.Contains(f[2], "K") {
+				continue
+			}
+			if pt, err := strconv.ParseFloat(f[0], 64); err == nil && pt <= t+0.001 && pt > best {
+				best, bestD = pt, 0
+				if dt, err := strconv.ParseFloat(f[1], 64); err == nil {
+					bestD = pt - dt
+				}
+			}
+		}
+		if best >= 0 {
+			k = best
+			// retraso de presentación de los fotogramas B: el vídeo empieza ese tiempo después que el audio
+			if bestD > 0 && bestD < 0.5 {
+				d = bestD
+			}
+		}
+	}
+	writeJSON(w, r, map[string]any{"k": k, "d": d})
 }
 
 // limitBuf guarda solo el final de la salida de error de ffmpeg (máx. 2 KB).
@@ -1292,6 +1364,7 @@ func (a *App) routes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/clientlog", a.hClientLog)
 	mux.HandleFunc("GET /stream/{id}", a.hStream)
 	mux.HandleFunc("GET /remux/{id}", a.hRemux)
+	mux.HandleFunc("GET /api/keyframe/{id}", a.hKeyframe)
 	mux.HandleFunc("GET /sub/{id}/{n}", a.hSub)
 
 	// Xtream y TV en directo

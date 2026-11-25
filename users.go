@@ -170,9 +170,9 @@ func (a *App) allowed(u *User, r *http.Request) bool {
 		if eps := a.bySeries[first("/api/series/")]; len(eps) > 0 {
 			return u.libOK(eps[0].Lib)
 		}
-	case has("/api/item/"), has("/api/meta/"), has("/api/thumb/"), has("/stream/"), has("/remux/"), has("/sub/"):
+	case has("/api/item/"), has("/api/meta/"), has("/api/thumb/"), has("/api/keyframe/"), has("/stream/"), has("/remux/"), has("/sub/"):
 		id := first("/api/item/")
-		for _, pre := range []string{"/api/meta/", "/api/thumb/", "/stream/", "/remux/", "/sub/"} {
+		for _, pre := range []string{"/api/meta/", "/api/thumb/", "/api/keyframe/", "/stream/", "/remux/", "/sub/"} {
 			if has(pre) {
 				id = first(pre)
 			}
